@@ -2448,13 +2448,16 @@ async function startUp(m){
 setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalone'}),400);
 // Bridge LIVE events to the actual fishing controls in this game scope.
 let liveActionAt=0;
+window.mancingLiveState=()=>({ready:!!MODE.ready,started:!!G.started,ui:!!G.ui,state:G.state,ap:!!(document.getElementById('apOn')||{}).checked});
 window.mancingLiveAction=(event,strikeSeconds=7)=>{
   const now=Date.now(); if(now-liveActionAt<1800) return {ok:false,reason:'cooldown'};
   liveActionAt=now;
   const kind=String(event?.kind||'').toLowerCase();
   // Comments, gifts, likes and configured tap events can trigger an action.
   if(!['comment','gift','like','tap'].includes(kind)) return {ok:false,reason:'unsupported-event'};
-  if(!G.started || G.ui || !MODE.ready) return {ok:false,reason:'game-not-ready'};
+  if(document.getElementById('apOn')?.checked) return {ok:false,reason:'autopilot-bawaan-aktif'};
+  if(!G.started || !MODE.ready) return {ok:false,reason:'game-not-ready'};
+  if(G.ui) return {ok:false,reason:'menu-terbuka'};
   if(G.state==='idle'){
     pressDown(null);
     if(G.state==='charging') { G.power=.58; pressUp(); return {ok:true,action:'cast'}; }
@@ -2474,24 +2477,232 @@ window.mancingLiveAction=(event,strikeSeconds=7)=>{
 
 
 <style>
-#liveConnect{position:fixed;z-index:999999;right:12px;bottom:12px;width:min(350px,calc(100vw - 24px));max-height:72vh;overflow:auto;background:#071d2b;color:#e9fbff;border:1px solid #2b8495;border-radius:14px;padding:12px;font:13px system-ui;box-shadow:0 8px 35px #0009}
-#liveConnect summary{font-weight:800;cursor:pointer;font-size:14px}#liveConnect input,#liveConnect select{box-sizing:border-box;width:100%;margin:5px 0;padding:9px;border-radius:8px;border:1px solid #347081;background:#102f40;color:#fff}#liveConnect button{padding:9px 12px;border:0;border-radius:8px;background:#20a6a8;color:#001b20;font-weight:800;margin:4px 3px 4px 0}#liveConnect .lcstatus{padding:6px;background:#102f40;border-radius:7px;margin:7px 0}#lcEvents{font-size:11px;max-height:100px;overflow:auto;white-space:pre-wrap;color:#b9e7ef}
+#lcFab{position:fixed;z-index:999998;right:62px;top:96px;width:38px;height:38px;border-radius:50%;padding:0;border:1px solid #2b8495;background:rgba(3,23,34,.8);display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;transition:opacity .2s}
+#lcFab svg{width:22px;height:22px;pointer-events:none}
+#lcFab i{position:absolute;right:0;top:0;width:11px;height:11px;border-radius:50%;background:#7b8a93;border:2px solid #031722;pointer-events:none}
+#lcFab[data-s=wait] i{background:#ffc93c}#lcFab[data-s=ok] i{background:#3ddc84}#lcFab[data-s=warn] i{background:#ff9a3c}#lcFab[data-s=err] i{background:#ff4d4d}
+body:has(#app.clean) #lcFab{opacity:.12}
+#lcPanel{position:fixed;z-index:999999;right:12px;top:142px;width:min(310px,calc(100vw - 24px));max-height:calc(100vh - 160px);max-height:calc(100dvh - 160px);overflow:auto;box-sizing:border-box;background:#071d2b;color:#e9fbff;border:1px solid #2b8495;border-radius:14px;padding:12px;font:13px/1.35 system-ui,sans-serif;box-shadow:0 8px 35px #0009;touch-action:pan-y}
+#lcPanel[hidden]{display:none}
+#lcPanel .lch{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+#lcPanel .lch b{font-size:14px}
+#lcPanel .lch button{width:30px;height:30px;margin:0;padding:0;font-size:20px;line-height:1;background:transparent;color:#e9fbff;border:1px solid #347081;border-radius:8px;cursor:pointer}
+#lcPanel label{display:block;margin-top:6px;color:#9fd3dc;font-size:12px}
+#lcPanel input[type=text],#lcPanel input[type=password],#lcPanel select{box-sizing:border-box;width:100%;margin:3px 0 0;padding:8px;border-radius:8px;border:1px solid #347081;background:#102f40;color:#fff;font:inherit;font-size:14px}
+#lcPanel .lcchk{display:flex;align-items:center;gap:8px;color:#e9fbff;font-size:13px}
+#lcPanel .lcchk input{width:auto;margin:0}
+#lcPanel .lcbtns{display:flex;gap:6px;margin-top:10px}
+#lcPanel .lcbtns button,#lcTest{padding:9px 10px;border:0;border-radius:8px;background:#20a6a8;color:#001b20;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+#lcPanel .lcbtns button{flex:1}
+#lcPanel button:disabled{opacity:.4;cursor:default}
+#lcPanel #lcDisc{background:#33576a;color:#e9fbff}
+#lcTest{display:block;width:100%;margin-top:8px;background:#ffc93c}
+#lcPanel .lcstatus{padding:7px 8px;background:#102f40;border-radius:8px;margin:2px 0 4px;word-break:break-word}
+#lcTests{margin-top:8px}
+#lcTests .lcrow{display:flex;gap:6px;padding:4px 0;border-top:1px solid #153b4d;font-size:12px}
+#lcTests .lcrow>b{flex:none;width:18px;text-align:center}
+#lcTests .lcrow>span{word-break:break-word}
+#lcTests .lcrow em{font-style:normal;color:#9fd3dc}
+#lcTests .lcsum{padding-top:6px;font-weight:800}
+#lcPanel small{display:block;color:#8db7c1;margin-top:6px;line-height:1.35}
+#lcEvents{font-size:11px;max-height:90px;overflow:auto;white-space:pre-wrap;color:#b9e7ef;margin-top:6px}
 </style>
-<details id="liveConnect"><summary>🎣 LIVE CONNECT — YouTube / TikTok</summary>
-<div class="lcstatus" id="lcStatus">Belum tersambung. Masukkan username dan URL connector Node.js.</div>
-<label>URL connector Node.js (WebSocket)</label><input id="lcUrl" placeholder="wss://alamat-server-connector/ws">
-<label>Username TikTok (tanpa @)</label><input id="lcTikTok" placeholder="username_tiktok">
-<label>Token connector (jika disetel di server)</label><input id="lcToken" type="password" placeholder="Token akses (opsional jika server tanpa token)">
-<label>YouTube: URL live atau ID live (bukan username saja)</label><input id="lcYoutube" placeholder="https://youtube.com/watch?v=...">
-<label>Durasi strike (detik)</label><select id="lcStrike"><option value="5">5 detik</option><option value="7" selected>7 detik</option><option value="10">10 detik</option></select>
-<label><input id="lcAuto" type="checkbox" style="width:auto"> Auto mode (default mati)</label>
-<button id="lcConnect">Koneksikan</button><button id="lcDisconnect">Putuskan</button><div id="lcEvents">Event LIVE akan tampil di sini.</div>
-</details>
+<button id="lcFab" type="button" aria-label="LIVE Connect" title="LIVE Connect" data-s="off"><svg viewBox="0 0 24 24" fill="none" stroke="#7fe3e6" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2.2" fill="#7fe3e6" stroke="none"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg><i></i></button>
+<div id="lcPanel" hidden>
+<div class="lch"><b>📡 LIVE CONNECT</b><button id="lcClose" type="button" aria-label="Tutup">×</button></div>
+<div class="lcstatus" id="lcStatus">Belum tersambung. Isi URL connector lalu klik Koneksikan.</div>
+<label for="lcUrl">URL connector (wss://…/ws)</label><input id="lcUrl" type="text" placeholder="wss://xxxx.ngrok-free.app/ws" autocomplete="off" autocapitalize="off" spellcheck="false">
+<label for="lcToken">Token connector</label><input id="lcToken" type="password" placeholder="isi dari token.txt (kosong jika server tanpa token)" autocomplete="off">
+<label for="lcTikTok">Username TikTok (tanpa @)</label><input id="lcTikTok" type="text" placeholder="username_tiktok" autocomplete="off" autocapitalize="off" spellcheck="false">
+<label for="lcYoutube">YouTube: URL live atau ID video LIVE</label><input id="lcYoutube" type="text" placeholder="https://youtube.com/watch?v=..." autocomplete="off" autocapitalize="off" spellcheck="false">
+<label for="lcStrike">Durasi strike (detik)</label><select id="lcStrike"><option value="5">5 detik</option><option value="7" selected>7 detik</option><option value="10">10 detik</option></select>
+<label class="lcchk"><input id="lcAuto" type="checkbox"> Auto mode: event LIVE menggerakkan kail (default mati)</label>
+<div class="lcbtns"><button id="lcConn" type="button">Koneksikan</button><button id="lcDisc" type="button" disabled>Putuskan</button></div>
+<button id="lcTest" type="button">🧪 Tes Semua</button>
+<div id="lcTests"></div>
+<small>Tes Semua benar-benar melempar kail 1x untuk mengetes aksi. Jalankan setelah game dimulai.</small>
+<div id="lcEvents">Event LIVE akan tampil di sini.</div>
+</div>
 <script>
-(()=>{const $=id=>document.getElementById(id);let ws=null;const status=t=>{$('lcStatus').textContent=t};const log=t=>{const e=$('lcEvents');e.textContent=(new Date().toLocaleTimeString()+' '+t+'\n'+e.textContent).slice(0,1800)};
-(()=>{try{const u=localStorage.getItem('lcUrl'),t=localStorage.getItem('lcToken');if(u&&!$('lcUrl').value)$('lcUrl').value=u;if(t&&!$('lcToken').value)$('lcToken').value=t}catch(e){}})();
-$('lcConnect').onclick=()=>{let url=$('lcUrl').value.trim();if(!url){status('Isi URL WebSocket connector Node.js dulu.');return}url=url.replace(/^https:\/\//i,'wss://').replace(/^http:\/\//i,'ws://');if(!/^wss?:\/\/[^/]+\/ws/i.test(url))url=url.replace(/\/+$/,'')+'/ws';$('lcUrl').value=url;try{localStorage.setItem('lcUrl',url);localStorage.setItem('lcToken',$('lcToken').value.trim())}catch(e){}try{const token=$('lcToken').value.trim();const sep=url.includes('?')?'&':'?';ws=new WebSocket(token?url+sep+'token='+encodeURIComponent(token):url)}catch(e){status('URL WebSocket tidak valid.');return}status('Menghubungkan ke connector Node.js…');ws.onopen=()=>{status('Terhubung ke connector. Mengirim username…');ws.send(JSON.stringify({type:'configure',tiktokUsername:$('lcTikTok').value.trim().replace(/^@/,''),youtubeLive:$('lcYoutube').value.trim(),auto:$('lcAuto').checked,strikeSeconds:Number($('lcStrike').value)}))};ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}if(m.type==='status'){status(m.message||'Status diperbarui');return}if(m.type==='error'){status('Error: '+(m.message||'connector'));log('ERROR '+m.message);return}if(m.type==='event'){const d=m.data||{};log((d.platform||'LIVE')+' '+(d.kind||'event')+' — '+(d.username||d.nickname||'penonton')+' '+(d.text||d.giftName||d.count||''));window.dispatchEvent(new CustomEvent('mancing-live-event',{detail:d}));if($('lcAuto').checked){const result=window.mancingLiveAction?.(d,Number($('lcStrike').value));log(result?.ok?'AKSI GAME: '+result.action:'Aksi dilewati: '+(result?.reason||'bridge belum siap'));window.dispatchEvent(new CustomEvent('mancing-live-action',{detail:{...d,strikeSeconds:Number($('lcStrike').value),result}}));}}};ws.onerror=()=>status('Koneksi error. Pastikan Node.js connector aktif dan URL benar.');ws.onclose=()=>status('Koneksi terputus.')};$('lcDisconnect').onclick=()=>{if(ws)ws.close();ws=null;status('Diputuskan.')};
-window.addEventListener('mancing-live-event',e=>{const d=e.detail||{};if(d.kind==='tap'||d.kind==='like')window.dispatchEvent(new CustomEvent('mancing-live-tap',{detail:d}));});
+(()=>{
+const $=id=>document.getElementById(id);
+const fab=$('lcFab'),panel=$('lcPanel');
+const S={ws:null,state:'off',manual:false,retry:0,timer:null,real:0,testing:false,hook:null,lastStatus:''};
+const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const strike=()=>Number($('lcStrike').value)||7;
+const status=t=>{$('lcStatus').textContent=t};
+const log=t=>{const e=$('lcEvents');e.textContent=(new Date().toLocaleTimeString()+' '+t+'\n'+e.textContent).slice(0,1800)};
+function setState(s,msg){S.state=s;fab.dataset.s=s;if(msg!=null){status(msg);if(s==='ok')S.lastStatus=msg}sync()}
+function sync(){const busy=S.state==='wait'||S.state==='ok'||S.state==='warn';$('lcConn').disabled=busy;$('lcDisc').disabled=!busy&&!S.timer}
+/* simpan isian terakhir */
+['lcUrl','lcToken','lcTikTok','lcYoutube'].forEach(id=>{const v=LS.get(id);if(v)$(id).value=v;$(id).addEventListener('input',()=>LS.set(id,$(id).value.trim()))});
+(()=>{const v=LS.get('lcStrike');if(v&&[...$('lcStrike').options].some(o=>o.value===v))$('lcStrike').value=v;$('lcStrike').addEventListener('change',()=>LS.set('lcStrike',$('lcStrike').value))})();
+/* panel buka/tutup; ketikan di panel tidak boleh sampai ke tombol game (Spasi = lempar, L = panel 🤖) */
+['keydown','keyup','keypress','pointerdown'].forEach(t=>{panel.addEventListener(t,e=>e.stopPropagation());fab.addEventListener(t,e=>e.stopPropagation())});
+function openPanel(f){const show=f==null?panel.hidden:f;panel.hidden=!show;if(show){const g=$('livePanel');if(g)g.hidden=true}}
+fab.addEventListener('click',()=>openPanel());
+$('lcClose').addEventListener('click',()=>openPanel(false));
+const bl=$('bLive');if(bl)bl.addEventListener('click',()=>{panel.hidden=true});
+/* URL */
+function normUrl(){let u=$('lcUrl').value.trim();if(!u)return '';u=u.replace(/\/health\/?$/i,'');if(!/^(wss?|https?):\/\//i.test(u))u='wss://'+u;u=u.replace(/^https:\/\//i,'wss://').replace(/^http:\/\//i,'ws://');if(!/^wss?:\/\/[^/]+\/ws/i.test(u))u=u.replace(/\/+$/,'')+'/ws';return u}
+function mixed(u){if(location.protocol!=='https:'||!/^ws:\/\//i.test(u))return false;try{const h=new URL(u.replace(/^ws:/i,'http:')).hostname;return !(h==='localhost'||h==='127.0.0.1'||h==='[::1]')}catch(e){return true}}
+function wsFor(u){const t=$('lcToken').value.trim();return new WebSocket(t?u+(u.includes('?')?'&':'?')+'token='+encodeURIComponent(t):u)}
+const cfg=()=>JSON.stringify({type:'configure',tiktokUsername:$('lcTikTok').value.trim().replace(/^@/,''),youtubeLive:$('lcYoutube').value.trim(),auto:$('lcAuto').checked,strikeSeconds:strike()});
+/* event dari connector → game */
+function handleEvent(d,main){
+  if(main&&d.platform!=='TEST')S.real++;
+  log((d.platform||'LIVE')+' '+(d.kind||'event')+' — '+(d.username||d.nickname||'penonton')+' '+(d.text||d.giftName||d.count||''));
+  window.dispatchEvent(new CustomEvent('mancing-live-event',{detail:d}));
+  if($('lcAuto').checked){const r=window.mancingLiveAction?window.mancingLiveAction(d,strike()):null;log(r&&r.ok?'AKSI GAME: '+r.action:'Aksi dilewati: '+((r&&r.reason)||'bridge belum siap'));window.dispatchEvent(new CustomEvent('mancing-live-action',{detail:{...d,strikeSeconds:strike(),result:r}}))}
+}
+window.addEventListener('mancing-live-event',e=>{const d=e.detail||{};if(d.kind==='tap'||d.kind==='like')window.dispatchEvent(new CustomEvent('mancing-live-tap',{detail:d}))});
+function route(m,main){
+  if(S.hook)S.hook(m);
+  if(m.type==='status'){if(main)setState('ok',m.message||'Status diperbarui')}
+  else if(m.type==='error'){log('ERROR '+(m.message||'connector'));if(main)setState('warn','Error: '+(m.message||'connector'))}
+  else if(m.type==='event')handleEvent(m.data||{},main);
+}
+/* sambung / putus */
+function dial(u){
+  clearTimeout(S.timer);S.timer=null;
+  let ws;try{ws=wsFor(u)}catch(e){setState('err','URL WebSocket tidak valid.');return}
+  S.ws=ws;setState('wait','Menghubungkan ke connector…');
+  ws.onopen=()=>{S.retry=0;setState('ok','Terhubung. Mengirim akun…');try{ws.send(cfg())}catch(e){}};
+  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}route(m,true)};
+  ws.onerror=()=>{};
+  ws.onclose=()=>{
+    if(S.ws!==ws)return;S.ws=null;
+    if(S.manual){setState('off','Diputuskan.');return}
+    const d=Math.min(15000,2000*(++S.retry));setState('err','Koneksi terputus. Mencoba lagi dalam '+Math.round(d/1000)+' dtk… (klik Putuskan untuk berhenti)');
+    S.timer=setTimeout(()=>dial(u),d);sync();
+  };
+}
+function connect(){
+  if(S.ws||S.timer)return;
+  const u=normUrl();if(!u){status('Isi URL connector dulu (wss://…/ws).');$('lcUrl').focus();return}
+  if(mixed(u)){setState('err','Game dibuka lewat HTTPS, URL harus diawali wss:// (bukan ws://).');return}
+  $('lcUrl').value=u;LS.set('lcUrl',u);S.manual=false;S.retry=0;dial(u);
+}
+function disconnect(){
+  S.manual=true;clearTimeout(S.timer);S.timer=null;const ws=S.ws;S.ws=null;
+  if(ws){try{ws.send(JSON.stringify({type:'disconnect'}))}catch(e){}try{ws.close()}catch(e){}}
+  setState('off','Diputuskan.');
+}
+$('lcConn').addEventListener('click',connect);
+$('lcDisc').addEventListener('click',disconnect);
+/* ===== Tes Semua ===== */
+function waitFor(pred,ms,ws){return new Promise((res,rej)=>{
+  const cl=()=>{clearTimeout(t);S.hook=null;rej('closed')};
+  const t=setTimeout(()=>{S.hook=null;if(ws)ws.removeEventListener('close',cl);rej('timeout')},ms);
+  if(ws)ws.addEventListener('close',cl,{once:true});
+  S.hook=m=>{if(pred(m)){clearTimeout(t);S.hook=null;if(ws)ws.removeEventListener('close',cl);res(m)}};
+})}
+function addRow(box,name){
+  const r=document.createElement('div');r.className='lcrow';
+  const ic=document.createElement('b'),tx=document.createElement('span');
+  ic.textContent='⏳';tx.textContent=name;r.append(ic,tx);box.append(r);const pn=$('lcPanel');pn.scrollTop=pn.scrollHeight;
+  const set=(i,msg,cls)=>{ic.textContent=i;tx.textContent='';const n=document.createElement('strong');n.textContent=name;tx.append(n);if(msg){const m=document.createElement('em');m.textContent=' — '+msg;tx.append(m)}r.dataset.r=cls};
+  return{ok:m=>set('✅',m,'ok'),warn:m=>set('⚠️',m,'warn'),bad:m=>set('❌',m,'bad'),skip:m=>set('⏭️',m,'skip')};
+}
+function actMsg(res){
+  if(!res)return['bad','Tidak ada jawaban dari jembatan game.'];
+  if(res.ok)return['ok','aksi game: '+res.action];
+  switch(res.reason){
+    case 'waiting-for-next-action':return['ok','diterima, game sedang menunggu (status '+res.state+')'];
+    case 'cooldown':return['warn','terlalu cepat (cooldown 1,8 dtk)'];
+    case 'menu-terbuka':return['warn','menu/toko sedang terbuka, tutup dulu'];
+    case 'autopilot-bawaan-aktif':return['warn','autopilot bawaan (🤖) aktif, matikan dulu'];
+    case 'game-not-ready':return['bad','game belum dimulai'];
+    default:return['bad',String(res.reason||'gagal')];
+  }
+}
+async function runTests(){
+  if(S.testing)return;S.testing=true;$('lcTest').disabled=true;
+  const box=$('lcTests');box.textContent='';
+  const tally={ok:0,warn:0,bad:0};
+  const mk=name=>{const r=addRow(box,name);return{ok:m=>{tally.ok++;r.ok(m)},warn:m=>{tally.warn++;r.warn(m)},bad:m=>{tally.bad++;r.bad(m)},skip:m=>r.skip(m)}};
+  let tmp=null;
+  try{
+    /* 1. jembatan game */
+    let gameOk=false;
+    {const r=mk('Jembatan ke game');
+      if(typeof window.mancingLiveAction!=='function'||typeof window.mancingLiveState!=='function')r.bad('jembatan tidak ditemukan, index.html tidak lengkap');
+      else{const st=window.mancingLiveState();
+        if(!st.ready)r.bad('game belum selesai dimuat');
+        else if(!st.started)r.warn('game belum dimulai, klik "Mulai Manual" lalu tes lagi');
+        else if(st.ap)r.warn('autopilot bawaan (🤖) aktif; Auto LIVE Connect dilewati selama itu nyala');
+        else if(st.ui)r.warn('menu/toko sedang terbuka, tutup dulu');
+        else{gameOk=true;r.ok('siap (status kail: '+st.state+')')}}}
+    /* 2. aksi komentar / gift / like lewat jembatan yang sama dengan event nyata */
+    const kinds=[['comment','Aksi: komentar'],['gift','Aksi: gift'],['like','Aksi: like']];
+    for(let i=0;i<kinds.length;i++){
+      const r=mk(kinds[i][1]);
+      if(!gameOk){r.skip('dilewati (game belum siap)');continue}
+      if(i)await sleep(1900);
+      const res=window.mancingLiveAction({at:Date.now(),platform:'TEST',kind:kinds[i][0],username:'tester',text:'tes',giftName:'Rose',count:1},strike());
+      const[k,m]=actMsg(res);r[k](m);
+    }
+    /* 3. connector */
+    const u=normUrl();
+    let ws=null;
+    {const r=mk('Connector (URL + token)');
+      if(!u)r.skip('isi URL connector dulu');
+      else if(mixed(u))r.bad('game HTTPS, URL harus wss://');
+      else if(S.ws&&S.ws.readyState===1){ws=S.ws;r.ok('sudah tersambung')}
+      else{
+        try{
+          tmp=wsFor(u);tmp.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}route(m,false)};
+          const p=waitFor(m=>m.type==='status',9000,tmp);
+          await p;ws=tmp;r.ok('connector menjawab');
+        }catch(e){
+          r.bad(e==='timeout'?'tidak menjawab dalam 9 dtk':'ditolak/tidak terjangkau: cek connector & ngrok masih jalan, token benar, URL berakhiran /ws');
+          try{tmp.close()}catch(x){}tmp=null;
+        }}}
+    /* 4. jalur penuh connector → game */
+    {const r=mk('Jalur connector → game');
+      if(!ws)r.skip('dilewati (connector belum terjangkau)');
+      else{
+        try{
+          const p=waitFor(m=>m.type==='event'&&m.data&&m.data.platform==='TEST',3500,ws);
+          ws.send(JSON.stringify({type:'test'}));
+          await p;r.ok('event tes dari connector sampai ke game (lihat log)');
+        }catch(e){r.warn('connector tidak membalas tes: kemungkinan server.js masih versi lama, ganti dengan server.js terbaru')}
+      }}
+    /* 5. akun TikTok / YouTube */
+    {const r=mk('Akun TikTok / YouTube');
+      const tt=$('lcTikTok').value.trim(),yt=$('lcYoutube').value.trim();
+      if(!ws)r.skip('dilewati (connector belum terjangkau)');
+      else if(!tt&&!yt)r.skip('isi username TikTok atau URL YouTube LIVE dulu');
+      else if(ws===S.ws){
+        const s=S.lastStatus||'';
+        if(/tersambung/i.test(s)&&S.state==='ok')r.ok(s);
+        else r.warn(s||'belum ada status akun, tunggu atau klik Koneksikan ulang');
+      }else{
+        const errs=[];
+        try{
+          const p=waitFor(m=>{if(m.type==='error')errs.push(m.message);return m.type==='status'&&/TikTok|YouTube/.test(m.message||'')},30000,ws);
+          ws.send(cfg());
+          const m=await p;
+          if(/tersambung/i.test(m.message)&&!errs.length)r.ok(m.message);
+          else if(/tersambung/i.test(m.message))r.warn(m.message+' | '+errs.join(' | '));
+          else r.bad(errs.length?errs.join(' | '):m.message);
+        }catch(e){r.bad(errs.length?errs.join(' | '):'tidak ada jawaban dalam 30 dtk (akun sedang LIVE?)')}
+      }}
+    /* 6. event nyata */
+    {const r=mk('Event LIVE nyata');
+      if(S.real>0)r.ok(S.real+' event nyata sudah masuk');
+      else r.warn('belum ada; setelah Koneksikan, kirim komentar/like ke live Anda lalu lihat log');}
+  }finally{
+    if(tmp){try{tmp.close()}catch(e){}}
+    S.hook=null;
+    const s=document.createElement('div');s.className='lcsum';s.textContent='Hasil: '+tally.ok+' ✅  '+tally.warn+' ⚠️  '+tally.bad+' ❌';box.append(s);const pn=$('lcPanel');pn.scrollTop=pn.scrollHeight;
+    S.testing=false;$('lcTest').disabled=false;
+  }
+}
+$('lcTest').addEventListener('click',runTests);
+window.mancingLiveSelfTest=runTests;
+sync();
 })();
 </script>
 

@@ -45,6 +45,7 @@ wss.on('connection', ws => {
   ws.on('message', async raw => {
     let msg; try { msg = JSON.parse(raw.toString()); } catch { return send(ws, { type: 'error', message: 'Format pesan tidak valid.' }); }
     if (msg.type === 'disconnect') { closeSession(ws); return send(ws, { type: 'status', message: 'Sesi LIVE diputus.' }); }
+    if (msg.type === 'test') return emit(ws, { platform: 'TEST', kind: 'comment', username: 'tester', text: 'Tes dari connector' });
     if (msg.type !== 'configure') return;
     closeSession(ws);
     const session = { tiktok: null, youtube: null }; sessions.set(ws, session);
