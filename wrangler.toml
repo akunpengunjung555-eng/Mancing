@@ -1,6 +1,11 @@
-name = "mancing-laut-dalam-live"
+name = "mancing"
 main = "worker.js"
 compatibility_date = "2026-10-13"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/ws", "/health"]
 
 [[durable_objects.bindings]]
 name = "GAME_ROOM"
