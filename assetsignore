@@ -1,0 +1,15 @@
+.assetsignore
+worker.js
+wrangler.toml
+package.json
+package-lock.json
+render.yaml
+Dockerfile
+Dockerfile.txt
+server.js
+README*.md
+node_modules
+ngrok
+connector
+token.txt
+*.bat
