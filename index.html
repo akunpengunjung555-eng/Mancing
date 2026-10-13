@@ -2458,15 +2458,15 @@ setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalon
 <button id="liveGlobalFab" type="button" aria-label="Buka panel Live Global">🌊 LIVE GLOBAL</button>
 <section id="liveGlobalPanel" aria-label="Panel Mancing Laut Dalam Live Global">
  <div class="lg-head"><h3>🎣 Mancing Laut Dalam · Global</h3><button class="lg-close" id="lgClose" type="button">Tutup ✕</button></div>
- <div class="lg-muted">Mode demo lokal — aksi ditampilkan di panel ini.</div>
+ <div class="lg-muted" id="lgStatus">Menghubungkan ke server Mancing…</div>
  <label for="lgViewer">Nama penonton</label><input id="lgViewer" maxlength="32" placeholder="Contoh: Pemancing123" value="Penonton Demo" />
- <div class="lg-wallet">🪙 Saldo demo: <span id="lgBalance">1.000</span> koin</div>
+ <div class="lg-wallet">🪙 Saldo koin: <span id="lgBalance">—</span> koin</div>
  <div class="lg-fish"><div><b>🐟 Ikan Karang</b><small>Biasa · tangkapan langsung</small></div><button class="lg-buy" data-fish="karang">10 koin · Tangkap</button></div>
  <div class="lg-fish"><div><b>🐠 Tuna Raksasa</b><small>Ikan besar · animasi besar</small></div><button class="lg-buy" data-fish="tuna">250 koin · Tangkap</button></div>
  <div class="lg-fish"><div><b>🦈 Hiu Legendaris</b><small>Langka · efek spesial</small></div><button class="lg-buy" data-fish="hiu">1.500 koin · Tangkap</button></div>
  <div class="lg-fish"><div><b>🐉 Leviathan Mitos</b><small>Boss laut dalam · event layar</small></div><button class="lg-buy" data-fish="leviathan">10.000 koin · Tangkap</button></div>
- <div class="lg-log" id="lgLog" aria-live="polite"><div>🌊 Laut siap. Pilih ikan untuk mencoba transaksi demo.</div></div>
- <p class="lg-note">Demo ini tidak memotong saldo utama game dan belum terhubung ke TikTok, YouTube, Facebook, atau server Cloudflare. Koneksi live perlu konfigurasi server dan akses platform yang sah.</p>
+ <div class="lg-log" id="lgLog" aria-live="polite"><div>🌊 Menghubungkan ke ruang global…</div></div>
+ <p class="lg-note">Pembelian memakai saldo wallet server Mancing. Integrasi event TikTok LIVE, YouTube Live, dan Facebook Live belum aktif; perlu konektor resmi dan autentikasi platform.</p>
 </section>
 <script>
 (()=>{'use strict';
@@ -2474,21 +2474,37 @@ setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalon
  if(!fab||!panel)return;
  const prices={karang:10,tuna:250,hiu:1500,leviathan:10000};
  const fishes={karang:{name:'Ikan Karang',emoji:'🐟',rar:'BIASA'},tuna:{name:'Tuna Raksasa',emoji:'🐠',rar:'BESAR'},hiu:{name:'Hiu Legendaris',emoji:'🦈',rar:'LEGENDARIS'},leviathan:{name:'Leviathan Mitos',emoji:'🐉',rar:'BOSS MITOS'}};
- let balance=1000;
  const fmt=n=>new Intl.NumberFormat('id-ID').format(n);
- const log=document.getElementById('lgLog');
- function entry(msg){const d=document.createElement('div');d.textContent=msg;log.prepend(d);while(log.children.length>12)log.lastElementChild.remove();}
+ const log=document.getElementById('lgLog'),status=document.getElementById('lgStatus'),balanceEl=document.getElementById('lgBalance');
+ let balance=null,ws=null,ready=false,retry=null;
+ let viewerId=localStorage.getItem('mancing-live-viewer-id');
+ if(!viewerId){viewerId='viewer-'+(crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2)+Date.now());localStorage.setItem('mancing-live-viewer-id',viewerId);}
+ const viewerName=()=>((document.getElementById('lgViewer').value||'Penonton').trim().slice(0,32)||'Penonton');
+ function entry(msg){const d=document.createElement('div');d.textContent=msg;log.prepend(d);while(log.children.length>30)log.lastElementChild.remove();}
  function open(){panel.style.display='block';fab.style.display='none'}
  function close(){panel.style.display='none';fab.style.display='block'}
  fab.addEventListener('click',open);document.getElementById('lgClose').addEventListener('click',close);
+ function setStatus(text){status.textContent=text;}
+ function connect(){
+   const scheme=location.protocol==='https:'?'wss:':'ws:';
+   ws=new WebSocket(scheme+'//'+location.host+'/ws');
+   ws.addEventListener('open',()=>{ready=true;setStatus('Terhubung ke ruang global Mancing');ws.send(JSON.stringify({type:'identify',viewerId,viewerName:viewerName()}));});
+   ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch{return;}
+     if(m.type==='wallet'){balance=m.balance;balanceEl.textContent=fmt(balance);return;}
+     if(m.type==='purchase_result'){if(m.ok){balance=m.balance;balanceEl.textContent=fmt(balance);entry('✅ Pembelian berhasil. Saldo tersisa '+fmt(balance)+' koin.');}else{if(typeof m.balance==='number'){balance=m.balance;balanceEl.textContent=fmt(balance);}entry('❌ '+(m.message||'Pembelian gagal'));}return;}
+     if(m.type==='global_catch'){const f=m.fish||fishes[m.fishId];if(!f)return;entry('🌊 '+(m.viewerName||'Penonton')+' menangkap '+f.emoji+' '+f.name+'! −'+fmt(m.cost)+' koin · '+String(f.rarity||f.rar||'').toUpperCase());if(m.fishId==='leviathan')entry('🚨 EVENT BOSS: LEVIATHAN MITOS MUNCUL DI LAUT DALAM!');return;}
+     if(m.type==='error')entry('⚠️ '+m.message);
+   });
+   ws.addEventListener('close',()=>{ready=false;setStatus('Koneksi terputus — mencoba menyambung ulang…');if(retry)clearTimeout(retry);retry=setTimeout(connect,2500);});
+   ws.addEventListener('error',()=>{setStatus('Koneksi server bermasalah');});
+ }
  panel.querySelectorAll('[data-fish]').forEach(btn=>btn.addEventListener('click',()=>{
-   const id=btn.dataset.fish,price=prices[id],fish=fishes[id],name=(document.getElementById('lgViewer').value||'Penonton').trim().slice(0,32)||'Penonton';
-   if(balance<price){entry('❌ '+name+' — koin tidak cukup untuk '+fish.name+'.');return;}
-   balance-=price;document.getElementById('lgBalance').textContent=fmt(balance);
-   entry('🎉 '+name+' menangkap '+fish.emoji+' '+fish.name+'! −'+fmt(price)+' koin · '+fish.rar+'.');
-   if(id==='leviathan')entry('🚨 EVENT BOSS: LEVIATHAN MITOS MUNCUL DI LAUT DALAM!');
-   btn.textContent='Tertangkap ✓';setTimeout(()=>{btn.textContent=fmt(price)+' koin · Tangkap'},1200);
+   const id=btn.dataset.fish;
+   if(!ws||ws.readyState!==WebSocket.OPEN||!ready){entry('⏳ Belum terhubung ke server. Coba lagi sebentar.');return;}
+   ws.send(JSON.stringify({type:'purchase',viewerId,viewerName:viewerName(),fishId:id}));
  }));
+ document.getElementById('lgViewer').addEventListener('change',()=>{if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'identify',viewerId,viewerName:viewerName()}));});
+ connect();
 })();
 </script>
 

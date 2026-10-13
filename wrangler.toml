@@ -3,7 +3,7 @@ main = "worker.js"
 compatibility_date = "2026-10-13"
 
 [assets]
-directory = "./public"
+directory = "."
 binding = "ASSETS"
 run_worker_first = ["/ws", "/health"]
 
