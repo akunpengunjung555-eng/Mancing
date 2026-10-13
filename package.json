@@ -3,11 +3,15 @@
   "version": "1.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
-  "scripts": { "start": "node server.js" },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "tiktok-live-connector": "^2.1.0",
     "ws": "^8.18.0",
-    "youtube-chat": "^1.5.0"
+    "youtube-chat": "^2.2.0"
   }
 }
