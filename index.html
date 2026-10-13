@@ -2422,12 +2422,8 @@ q('recBtn','click',async()=>{const b=$('recBtn');if(REC){REC.stop();return;}
 setEnv(CFG.loc||0,true);setAv(CFG.av||'2d');
 })();
 
-// Fail-safe: start the game even if optional graphics/HUD initialization throws.
-setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalone'}),400);
-try { applyGfx(); } catch (e) { console.error('Mancing applyGfx failed:', e); }
-try { updateHud(); } catch (e) { console.error('Mancing updateHud failed:', e); }
-try { refreshAct(); } catch (e) { console.error('Mancing refreshAct failed:', e); }
-try { requestAnimationFrame(frame); } catch (e) { console.error('Mancing frame failed:', e); }
+applyGfx();updateHud();refreshAct();
+requestAnimationFrame(frame);
 function bootFail(msg){$('bootTxt').textContent=msg||'Gagal memuat game.';$('bootBar').hidden=true;$('bootExit').hidden=false;}
 async function leave(){if(G.started&&G.state!=='idle'){toast('Selesaikan pancingan dulu.');return;}if(G.ui)closeSheet();await flushAll();post({t:'fish-exit'});if(window.parent===window)location.reload();}
 $('bExit').addEventListener('click',leave);$('startExit').addEventListener('click',leave);$('bootExit').addEventListener('click',leave);
@@ -2449,65 +2445,52 @@ async function startUp(m){
   $('boot').classList.add('off');
   post({t:'fish-loaded'});
 }
+setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalone'}),400);
+// Bridge LIVE events to the actual fishing controls in this game scope.
+let liveActionAt=0;
+window.mancingLiveAction=(event,strikeSeconds=7)=>{
+  const now=Date.now(); if(now-liveActionAt<1800) return {ok:false,reason:'cooldown'};
+  liveActionAt=now;
+  const kind=String(event?.kind||'').toLowerCase();
+  // Comments, gifts, likes and configured tap events can trigger an action.
+  if(!['comment','gift','like','tap'].includes(kind)) return {ok:false,reason:'unsupported-event'};
+  if(!G.started || G.ui || !MODE.ready) return {ok:false,reason:'game-not-ready'};
+  if(G.state==='idle'){
+    pressDown(null);
+    if(G.state==='charging') { G.power=.58; pressUp(); return {ok:true,action:'cast'}; }
+    return {ok:false,reason:'cannot-cast'};
+  }
+  if(G.state==='bite') { pressDown(null); return {ok:true,action:'hook'}; }
+  if(G.state==='fight') {
+    pressDown(null);
+    const ms=Math.max(500,Math.min(10000,Number(strikeSeconds)||7)*1000);
+    setTimeout(()=>{ if(G.pressed) pressUp(); },ms);
+    return {ok:true,action:'reel',duration:ms};
+  }
+  return {ok:false,reason:'waiting-for-next-action',state:G.state};
+};
 })();
 </script>
 
 
 <style>
-#liveGlobalFab{position:fixed;right:14px;bottom:90px;z-index:99990;border:1px solid #5eead4;background:linear-gradient(135deg,#064e3b,#0f766e);color:#ecfeff;border-radius:999px;padding:12px 16px;font:800 13px system-ui;box-shadow:0 8px 28px #0008;cursor:pointer}
-#liveGlobalPanel{position:fixed;z-index:99991;right:10px;bottom:145px;width:min(370px,calc(100vw - 20px));max-height:min(74vh,680px);overflow:auto;background:#071b2a;color:#e7faff;border:1px solid #2dd4bf;border-radius:18px;padding:14px;box-shadow:0 18px 55px #000b;font:14px/1.4 system-ui;display:none}
-#liveGlobalPanel *{box-sizing:border-box}#liveGlobalPanel .lg-head{display:flex;justify-content:space-between;gap:8px;align-items:center}#liveGlobalPanel h3{margin:0;font-size:17px}#liveGlobalPanel .lg-muted{color:#a8c6d4;font-size:12px}#liveGlobalPanel input{width:100%;padding:10px;border-radius:9px;border:1px solid #31576a;background:#102c3d;color:#fff;margin:8px 0}#liveGlobalPanel .lg-wallet{padding:10px;background:#103a45;border-radius:10px;margin:10px 0;font-weight:800;color:#fde68a}#liveGlobalPanel .lg-fish{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #234354}#liveGlobalPanel .lg-fish b{display:block}#liveGlobalPanel .lg-fish small{color:#a8c6d4}#liveGlobalPanel button{cursor:pointer;border:0;border-radius:9px;padding:9px 10px;font-weight:800}#liveGlobalPanel .lg-buy{background:#fbbf24;color:#302000;white-space:nowrap}#liveGlobalPanel .lg-close{background:#244454;color:#fff}#liveGlobalPanel .lg-log{margin-top:12px;background:#04131e;border-radius:10px;padding:10px;max-height:150px;overflow:auto;font-size:12px}#liveGlobalPanel .lg-log div{padding:5px 0;border-bottom:1px solid #18303d}#liveGlobalPanel .lg-note{font-size:11px;color:#a8c6d4;margin-top:8px}
+#liveConnect{position:fixed;z-index:999999;right:12px;bottom:12px;width:min(350px,calc(100vw - 24px));max-height:72vh;overflow:auto;background:#071d2b;color:#e9fbff;border:1px solid #2b8495;border-radius:14px;padding:12px;font:13px system-ui;box-shadow:0 8px 35px #0009}
+#liveConnect summary{font-weight:800;cursor:pointer;font-size:14px}#liveConnect input,#liveConnect select{box-sizing:border-box;width:100%;margin:5px 0;padding:9px;border-radius:8px;border:1px solid #347081;background:#102f40;color:#fff}#liveConnect button{padding:9px 12px;border:0;border-radius:8px;background:#20a6a8;color:#001b20;font-weight:800;margin:4px 3px 4px 0}#liveConnect .lcstatus{padding:6px;background:#102f40;border-radius:7px;margin:7px 0}#lcEvents{font-size:11px;max-height:100px;overflow:auto;white-space:pre-wrap;color:#b9e7ef}
 </style>
-<button id="liveGlobalFab" type="button" aria-label="Buka panel Live Global">🌊 LIVE GLOBAL</button>
-<section id="liveGlobalPanel" aria-label="Panel Mancing Laut Dalam Live Global">
- <div class="lg-head"><h3>🎣 Mancing Laut Dalam · Global</h3><button class="lg-close" id="lgClose" type="button">Tutup ✕</button></div>
- <div class="lg-muted" id="lgStatus">Menghubungkan ke server Mancing…</div>
- <label for="lgViewer">Nama penonton</label><input id="lgViewer" maxlength="32" placeholder="Contoh: Pemancing123" value="Penonton Demo" />
- <div class="lg-wallet">🪙 Saldo koin: <span id="lgBalance">—</span> koin</div>
- <div class="lg-fish"><div><b>🐟 Ikan Karang</b><small>Biasa · tangkapan langsung</small></div><button class="lg-buy" data-fish="karang">10 koin · Tangkap</button></div>
- <div class="lg-fish"><div><b>🐠 Tuna Raksasa</b><small>Ikan besar · animasi besar</small></div><button class="lg-buy" data-fish="tuna">250 koin · Tangkap</button></div>
- <div class="lg-fish"><div><b>🦈 Hiu Legendaris</b><small>Langka · efek spesial</small></div><button class="lg-buy" data-fish="hiu">1.500 koin · Tangkap</button></div>
- <div class="lg-fish"><div><b>🐉 Leviathan Mitos</b><small>Boss laut dalam · event layar</small></div><button class="lg-buy" data-fish="leviathan">10.000 koin · Tangkap</button></div>
- <div class="lg-log" id="lgLog" aria-live="polite"><div>🌊 Menghubungkan ke ruang global…</div></div>
- <p class="lg-note">Pembelian memakai saldo wallet server Mancing. Integrasi event TikTok LIVE, YouTube Live, dan Facebook Live belum aktif; perlu konektor resmi dan autentikasi platform.</p>
-</section>
+<details id="liveConnect"><summary>🎣 LIVE CONNECT — YouTube / TikTok</summary>
+<div class="lcstatus" id="lcStatus">Belum tersambung. Masukkan username dan URL connector Node.js.</div>
+<label>URL connector Node.js (WebSocket)</label><input id="lcUrl" placeholder="wss://alamat-server-connector/ws">
+<label>Username TikTok (tanpa @)</label><input id="lcTikTok" placeholder="username_tiktok">
+<label>Token connector (jika disetel di server)</label><input id="lcToken" type="password" placeholder="Token akses (opsional jika server tanpa token)">
+<label>YouTube: URL live atau ID live (bukan username saja)</label><input id="lcYoutube" placeholder="https://youtube.com/watch?v=...">
+<label>Durasi strike (detik)</label><select id="lcStrike"><option value="5">5 detik</option><option value="7" selected>7 detik</option><option value="10">10 detik</option></select>
+<label><input id="lcAuto" type="checkbox" style="width:auto"> Auto mode (default mati)</label>
+<button id="lcConnect">Koneksikan</button><button id="lcDisconnect">Putuskan</button><div id="lcEvents">Event LIVE akan tampil di sini.</div>
+</details>
 <script>
-(()=>{'use strict';
- const fab=document.getElementById('liveGlobalFab'),panel=document.getElementById('liveGlobalPanel');
- if(!fab||!panel)return;
- const prices={karang:10,tuna:250,hiu:1500,leviathan:10000};
- const fishes={karang:{name:'Ikan Karang',emoji:'🐟',rar:'BIASA'},tuna:{name:'Tuna Raksasa',emoji:'🐠',rar:'BESAR'},hiu:{name:'Hiu Legendaris',emoji:'🦈',rar:'LEGENDARIS'},leviathan:{name:'Leviathan Mitos',emoji:'🐉',rar:'BOSS MITOS'}};
- const fmt=n=>new Intl.NumberFormat('id-ID').format(n);
- const log=document.getElementById('lgLog'),status=document.getElementById('lgStatus'),balanceEl=document.getElementById('lgBalance');
- let balance=null,ws=null,ready=false,retry=null;
- let viewerId=localStorage.getItem('mancing-live-viewer-id');
- if(!viewerId){viewerId='viewer-'+(crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2)+Date.now());localStorage.setItem('mancing-live-viewer-id',viewerId);}
- const viewerName=()=>((document.getElementById('lgViewer').value||'Penonton').trim().slice(0,32)||'Penonton');
- function entry(msg){const d=document.createElement('div');d.textContent=msg;log.prepend(d);while(log.children.length>30)log.lastElementChild.remove();}
- function open(){panel.style.display='block';fab.style.display='none'}
- function close(){panel.style.display='none';fab.style.display='block'}
- fab.addEventListener('click',open);document.getElementById('lgClose').addEventListener('click',close);
- function setStatus(text){status.textContent=text;}
- function connect(){
-   const scheme=location.protocol==='https:'?'wss:':'ws:';
-   ws=new WebSocket(scheme+'//'+location.host+'/ws');
-   ws.addEventListener('open',()=>{ready=true;setStatus('Terhubung ke ruang global Mancing');ws.send(JSON.stringify({type:'identify',viewerId,viewerName:viewerName()}));});
-   ws.addEventListener('message',ev=>{let m;try{m=JSON.parse(ev.data)}catch{return;}
-     if(m.type==='wallet'){balance=m.balance;balanceEl.textContent=fmt(balance);return;}
-     if(m.type==='purchase_result'){if(m.ok){balance=m.balance;balanceEl.textContent=fmt(balance);entry('✅ Pembelian berhasil. Saldo tersisa '+fmt(balance)+' koin.');}else{if(typeof m.balance==='number'){balance=m.balance;balanceEl.textContent=fmt(balance);}entry('❌ '+(m.message||'Pembelian gagal'));}return;}
-     if(m.type==='global_catch'){const f=m.fish||fishes[m.fishId];if(!f)return;entry('🌊 '+(m.viewerName||'Penonton')+' menangkap '+f.emoji+' '+f.name+'! −'+fmt(m.cost)+' koin · '+String(f.rarity||f.rar||'').toUpperCase());if(m.fishId==='leviathan')entry('🚨 EVENT BOSS: LEVIATHAN MITOS MUNCUL DI LAUT DALAM!');return;}
-     if(m.type==='error')entry('⚠️ '+m.message);
-   });
-   ws.addEventListener('close',()=>{ready=false;setStatus('Koneksi terputus — mencoba menyambung ulang…');if(retry)clearTimeout(retry);retry=setTimeout(connect,2500);});
-   ws.addEventListener('error',()=>{setStatus('Koneksi server bermasalah');});
- }
- panel.querySelectorAll('[data-fish]').forEach(btn=>btn.addEventListener('click',()=>{
-   const id=btn.dataset.fish;
-   if(!ws||ws.readyState!==WebSocket.OPEN||!ready){entry('⏳ Belum terhubung ke server. Coba lagi sebentar.');return;}
-   ws.send(JSON.stringify({type:'purchase',viewerId,viewerName:viewerName(),fishId:id}));
- }));
- document.getElementById('lgViewer').addEventListener('change',()=>{if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'identify',viewerId,viewerName:viewerName()}));});
- connect();
+(()=>{const $=id=>document.getElementById(id);let ws=null;const status=t=>{$('lcStatus').textContent=t};const log=t=>{const e=$('lcEvents');e.textContent=(new Date().toLocaleTimeString()+' '+t+'\n'+e.textContent).slice(0,1800)};
+$('lcConnect').onclick=()=>{const url=$('lcUrl').value.trim();if(!url){status('Isi URL WebSocket connector Node.js dulu.');return}try{const token=$('lcToken').value.trim();const sep=url.includes('?')?'&':'?';ws=new WebSocket(token?url+sep+'token='+encodeURIComponent(token):url)}catch(e){status('URL WebSocket tidak valid.');return}status('Menghubungkan ke connector Node.js…');ws.onopen=()=>{status('Terhubung ke connector. Mengirim username…');ws.send(JSON.stringify({type:'configure',tiktokUsername:$('lcTikTok').value.trim().replace(/^@/,''),youtubeLive:$('lcYoutube').value.trim(),auto:$('lcAuto').checked,strikeSeconds:Number($('lcStrike').value)}))};ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}if(m.type==='status'){status(m.message||'Status diperbarui');return}if(m.type==='error'){status('Error: '+(m.message||'connector'));log('ERROR '+m.message);return}if(m.type==='event'){const d=m.data||{};log((d.platform||'LIVE')+' '+(d.kind||'event')+' — '+(d.username||d.nickname||'penonton')+' '+(d.text||d.giftName||d.count||''));window.dispatchEvent(new CustomEvent('mancing-live-event',{detail:d}));if($('lcAuto').checked){const result=window.mancingLiveAction?.(d,Number($('lcStrike').value));log(result?.ok?'AKSI GAME: '+result.action:'Aksi dilewati: '+(result?.reason||'bridge belum siap'));window.dispatchEvent(new CustomEvent('mancing-live-action',{detail:{...d,strikeSeconds:Number($('lcStrike').value),result}}));}}};ws.onerror=()=>status('Koneksi error. Pastikan Node.js connector aktif dan URL benar.');ws.onclose=()=>status('Koneksi terputus.')};$('lcDisconnect').onclick=()=>{if(ws)ws.close();ws=null;status('Diputuskan.')};
+window.addEventListener('mancing-live-event',e=>{const d=e.detail||{};if(d.kind==='tap'||d.kind==='like')window.dispatchEvent(new CustomEvent('mancing-live-tap',{detail:d}));});
 })();
 </script>
 

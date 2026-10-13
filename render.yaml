@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: mancing-live-connector
+    runtime: node
+    rootDir: connector
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: CONNECTOR_TOKEN
+        generateValue: true
