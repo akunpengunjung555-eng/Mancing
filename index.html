@@ -2422,8 +2422,12 @@ q('recBtn','click',async()=>{const b=$('recBtn');if(REC){REC.stop();return;}
 setEnv(CFG.loc||0,true);setAv(CFG.av||'2d');
 })();
 
-applyGfx();updateHud();refreshAct();
-requestAnimationFrame(frame);
+// Fail-safe: start the game even if optional graphics/HUD initialization throws.
+setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalone'}),400);
+try { applyGfx(); } catch (e) { console.error('Mancing applyGfx failed:', e); }
+try { updateHud(); } catch (e) { console.error('Mancing updateHud failed:', e); }
+try { refreshAct(); } catch (e) { console.error('Mancing refreshAct failed:', e); }
+try { requestAnimationFrame(frame); } catch (e) { console.error('Mancing frame failed:', e); }
 function bootFail(msg){$('bootTxt').textContent=msg||'Gagal memuat game.';$('bootBar').hidden=true;$('bootExit').hidden=false;}
 async function leave(){if(G.started&&G.state!=='idle'){toast('Selesaikan pancingan dulu.');return;}if(G.ui)closeSheet();await flushAll();post({t:'fish-exit'});if(window.parent===window)location.reload();}
 $('bExit').addEventListener('click',leave);$('startExit').addEventListener('click',leave);$('bootExit').addEventListener('click',leave);
@@ -2445,7 +2449,6 @@ async function startUp(m){
   $('boot').classList.add('off');
   post({t:'fish-loaded'});
 }
-setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalone'}),400);
 })();
 </script>
 
