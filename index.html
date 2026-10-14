@@ -1645,7 +1645,7 @@ function retract(refund){
 
 /* --- gigitan & pertarungan --- */
 function onBite(){
-  G.state='bite';G.biteT=0;SFX.bite();SFX.splash(false);vib([60,40,60]);
+  G.state='bite';G.biteT=0;G.liveMiss=liveLenient()&&Math.random()<.10;SFX.bite();SFX.splash(false);vib([60,40,60]);
   const p=bobber.position;splashFx(p.x,p.z,14,.8);addRipple(p.x,p.z,.4);ringAt(p.x,p.z,3);
 }
 function missBite(){
@@ -1929,7 +1929,7 @@ function updateWorld(t,dt){
     G.H.position.set(l.x+.4,-.8,l.z);animateFish(G.H,t,6);
     pitch=.33+Math.sin(t*45)*.06;tension=.5;bx=l.x;bz=l.z;tb=-.3+Math.sin(t*40)*.08;
     if(Math.random()<dt*8)splashFx(l.x,l.z,2,.5);
-    if(G.biteT>1.7)missBite();
+    if(G.biteT>(liveLenient()?14:1.7))missBite();
   }
   if(s==='fight'){
     updateFight(dt);if(G.state==='fight'){const F=G.f,b=G.bobBase;
@@ -2451,7 +2451,7 @@ setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalon
 let liveActionAt=0;
 window.mancingLiveState=()=>({ready:!!MODE.ready,started:!!G.started,ui:!!G.ui,state:G.state,ap:!!(document.getElementById('apOn')||{}).checked});
 window.mancingLiveAction=(event,strikeSeconds=7)=>{
-  const now=Date.now(); if(now-liveActionAt<1800) return {ok:false,reason:'cooldown'};
+  const now=Date.now(); if(now-liveActionAt<1200) return {ok:false,reason:'cooldown'};
   const kind=String(event?.kind||'').toLowerCase();
   // Comments, gifts, likes and configured tap events can trigger an action.
   if(!['comment','gift','like','tap'].includes(kind)) return {ok:false,reason:'unsupported-event'};
@@ -2467,20 +2467,82 @@ window.mancingLiveAction=(event,strikeSeconds=7)=>{
     if(G.state==='charging') { G.power=.58; pressUp(); return {ok:true,action:'cast'}; }
     return {ok:false,reason:'cannot-cast'};
   }
-  if(G.state==='bite') {
+  if(G.state==='bite') {            // komen "strike"
     if(wrong('hook')) return {ok:false,reason:'bukan-saatnya',state:G.state,want};
-    liveActionAt=now; pressDown(null); return {ok:true,action:'hook'};
+    liveActionAt=now; pressDown(null); pressUp(); return {ok:true,action:'hook'};
   }
-  if(G.state==='fight') {
+  if(G.state==='fight') {           // komen "angkat"
     if(wrong('reel')) return {ok:false,reason:'bukan-saatnya',state:G.state,want};
     liveActionAt=now;
-    pressDown(null);
-    const ms=Math.max(500,Math.min(10000,Number(strikeSeconds)||7)*1000);
-    setTimeout(()=>{ if(G.pressed) pressUp(); },ms);
-    return {ok:true,action:'reel',duration:ms};
+    const F=G.f;
+    if(F&&!F.assist){F.assist=true;F.at=0;F.missAt=rand(1.6,3.6);F.fp=Object.assign({},F.fp,{gain:.15});}
+    return {ok:true,action:'reel',duration:6000};
   }
   return {ok:false,reason:'waiting-for-next-action',state:G.state};
 };
+
+/* ===== Mode manual / LIVE (autopilot mati): ramah penonton =====
+   - jendela STRIKE 14 detik (normal 1,7 dtk) supaya sempat komen
+   - komen "angkat" menggulung ikan otomatis ±6 dtk; ~90% dapat, ~10% boncos
+   - sebelum "angkat", ikan tidak lepas (progress tidak turun di bawah 20%)
+   - petunjuk besar di layar: komen LEMPAR -> STRIKE -> ANGKAT */
+function liveLenient(){const a=document.getElementById('apOn');return !(a&&a.checked);}
+const _ufLive=updateFight;
+updateFight=function(dt){
+  const F=G.f;
+  if(F&&liveLenient()){
+    F.wt=(F.wt||0)+dt;
+    if(F.assist){
+      F.at+=dt;
+      if(G.liveMiss&&F.at>F.missAt){          // boncos: zona tertinggal, ikan lolos
+        F.prog=Math.max(0,F.prog-dt*.5);F.zv=0;F.zone=Math.max(0,F.zone-dt*.8);
+      }else{                                  // zona mengikuti ikan
+        const tg=clamp(F.fish-F.size/2,0,1-F.size);
+        F.zone+=(tg-F.zone)*Math.min(1,dt*7);F.zv=0;
+      }
+    }else{
+      if(F.wt>45){lostFish();return;}         // penonton terlalu lama diam
+      if(F.prog<.2)F.prog=.2;
+    }
+  }
+  _ufLive(dt);
+  if(F&&G.state==='fight'&&G.f===F&&liveLenient()&&!F.assist&&F.prog<.2)F.prog=.2;
+};
+let _revT=0;
+const _uwLive=updateWorld;
+updateWorld=function(t,dt){
+  _uwLive(t,dt);
+  const c=document.getElementById('lcAuto');
+  if(G.state==='reveal'&&liveLenient()&&c&&c.checked){_revT+=dt;if(_revT>6){_revT=0;closeReveal();}}else _revT=0;
+};
+(function(){
+  const css=document.createElement('style');
+  css.textContent='#lcHint{position:fixed;z-index:99990;left:50%;top:21%;transform:translateX(-50%);max-width:92vw;box-sizing:border-box;padding:10px 22px;border-radius:18px;background:rgba(3,23,34,.86);border:3px solid var(--hc,#3ddc84);box-shadow:0 0 26px var(--hc,#3ddc84);color:#fff;font:700 16px/1.25 system-ui,sans-serif;text-align:center;pointer-events:none;animation:lcHp .8s ease-in-out infinite alternate}#lcHint[hidden]{display:none}#lcHint b{display:block;font-size:34px;letter-spacing:1px;color:var(--hc,#3ddc84);text-shadow:0 0 12px var(--hc,#3ddc84)}#lcHint small{display:block;font-weight:500;font-size:13px;color:#cfeff5}@keyframes lcHp{from{transform:translateX(-50%) scale(1)}to{transform:translateX(-50%) scale(1.06)}}';
+  document.head.appendChild(css);
+  const el=document.createElement('div');el.id='lcHint';el.hidden=true;document.body.appendChild(el);
+  let last='';
+  setInterval(()=>{
+    let h=null;
+    try{
+      const on=document.getElementById('lcHintOn');
+      if(MODE.ready&&G.started&&!G.ui&&liveLenient()&&(!on||on.checked)){
+        const s=G.state;
+        if(s==='idle')h=['💬 Komen:','LEMPAR','untuk melempar kail','#3ddc84'];
+        else if(s==='waiting')h=['','Sabar…','menunggu ikan menyambar','#5fd4ff'];
+        else if(s==='bite')h=['💬 Komen:','STRIKE!','ikan menyambar! sisa '+Math.max(1,Math.ceil(14-G.biteT))+' detik','#ffc93c'];
+        else if(s==='fight')h=(G.f&&G.f.assist)?['','Menggulung…','ikan sedang ditarik naik','#5fd4ff']:['💬 Komen:','ANGKAT!','untuk menarik ikan naik','#ff7ad9'];
+      }
+    }catch(e){h=null}
+    const key=h?h.join('|'):'';
+    if(key===last)return;last=key;
+    if(!h){el.hidden=true;return;}
+    el.style.setProperty('--hc',h[3]);el.textContent='';
+    if(h[0])el.append(document.createTextNode(h[0]));
+    const b=document.createElement('b');b.textContent=h[1];el.append(b);
+    const sm=document.createElement('small');sm.textContent=h[2];el.append(sm);
+    el.hidden=false;
+  },200);
+})();
 
 })();
 </script>
@@ -2537,10 +2599,10 @@ body:has(#app.clean) #lcFab{opacity:.12}
 </style>
 <div id="lcCard" hidden>
 <div class="ct">🎣 CARA MAIN<small>ketik di kolom komentar</small></div>
-<div class="cr" data-w="cast"><b>!lempar</b><span>lempar kail</span></div>
-<div class="cr" data-w="hook"><b>!angkat</b><span>saat ikan menggigit</span></div>
-<div class="cr" data-w="reel"><b>!tarik</b><span>saat ikan melawan</span></div>
-<div class="cr" data-w="auto"><b>!mancing</b><span>otomatis sesuai situasi</span></div>
+<div class="cr" data-w="cast"><b>lempar</b><span>lempar kail</span></div>
+<div class="cr" data-w="hook"><b>strike</b><span>saat ikan menyambar</span></div>
+<div class="cr" data-w="reel"><b>angkat</b><span>tarik ikan naik</span></div>
+<div class="cr" data-w="auto"><b>mancing</b><span>otomatis sesuai situasi</span></div>
 <div class="cn">🎁 Gift &amp; ❤️ Like = aksi otomatis</div>
 <div class="cf" id="lcFeed"></div>
 </div>
@@ -2555,10 +2617,11 @@ body:has(#app.clean) #lcFab{opacity:.12}
 <label for="lcYoutube">YouTube: URL live atau ID video LIVE</label><input id="lcYoutube" type="text" placeholder="https://youtube.com/watch?v=..." autocomplete="off" autocapitalize="off" spellcheck="false">
 <label for="lcStrike">Durasi strike (detik)</label><select id="lcStrike"><option value="5">5 detik</option><option value="7" selected>7 detik</option><option value="10">10 detik</option></select>
 <label class="lcchk"><input id="lcAuto" type="checkbox"> Auto mode: event LIVE menggerakkan kail (default mati)</label>
-<label for="lcCmdMode">Komentar penonton</label><select id="lcCmdMode"><option value="cmd" selected>Hanya perintah (!lempar !angkat !tarik !mancing)</option><option value="free">Semua komentar menggerakkan kail</option></select>
+<label for="lcCmdMode">Komentar penonton</label><select id="lcCmdMode"><option value="cmd" selected>Hanya perintah (lempar, strike, angkat, mancing)</option><option value="free">Semua komentar menggerakkan kail</option></select>
 <label for="lcUserCd">Anti-spam: jeda per penonton</label><select id="lcUserCd"><option value="3">3 detik</option><option value="6" selected>6 detik</option><option value="10">10 detik</option></select>
+<label class="lcchk"><input id="lcHintOn" type="checkbox" checked> Petunjuk besar di layar: komen LEMPAR / STRIKE / ANGKAT (mode manual &amp; LIVE, bukan autopilot)</label>
 <label class="lcchk"><input id="lcShowList" type="checkbox" checked> Tampilkan daftar perintah di layar (saat Auto aktif)</label>
-<div class="lccmd"><b>!lempar</b> lempar kail · <b>!angkat</b> saat ikan menggigit · <b>!tarik</b> saat ikan melawan · <b>!mancing</b> otomatis sesuai situasi. Gift &amp; like selalu menjalankan aksi berikutnya.</div>
+<div class="lccmd"><b>lempar</b> lempar kail · <b>strike</b> saat ikan menyambar · <b>angkat</b> tarik ikan naik · <b>mancing</b> otomatis sesuai situasi (boleh pakai tanda ! di depan). Gift &amp; like selalu menjalankan aksi berikutnya.</div>
 <div class="lcbtns"><button id="lcConn" type="button">Koneksikan</button><button id="lcDisc" type="button" disabled>Putuskan</button></div>
 <button id="lcTest" type="button">🧪 Tes Semua</button>
 <div id="lcTests"></div>
@@ -2596,15 +2659,15 @@ function mixed(u){if(location.protocol!=='https:'||!/^ws:\/\//i.test(u))return f
 function wsFor(u){const t=$('lcToken').value.trim();return new WebSocket(t?u+(u.includes('?')?'&':'?')+'token='+encodeURIComponent(t):u)}
 const cfg=()=>JSON.stringify({type:'configure',tiktokUsername:$('lcTikTok').value.trim().replace(/^@/,''),youtubeLive:$('lcYoutube').value.trim(),auto:$('lcAuto').checked,strikeSeconds:strike()});
 /* event dari connector → game */
-const CMD={cast:['lempar','cast'],hook:['angkat','hook'],reel:['tarik','reel'],auto:['mancing']};
-function parseCmd(text){const m=String(text==null?'':text).trim().toLowerCase().match(/^!\s*([a-z]+)/);if(!m)return null;for(const k in CMD)if(CMD[k].includes(m[1]))return k;return null}
+const CMD={cast:['lempar','cast'],hook:['strike','hook'],reel:['angkat','reel'],auto:['mancing','tarik']};
+function parseCmd(text){const t=String(text==null?'':text).trim().toLowerCase();const m=t.match(/^!\s*([a-z]+)/)||t.match(/^([a-z]+)\s*[!.]*$/);if(!m)return null;for(const k in CMD)if(CMD[k].includes(m[1]))return k;return null}
 function wantOf(d){
   if(d.kind!=='comment')return{act:true,want:''};
   const c=parseCmd(d.text);
   if(!c)return{act:$('lcCmdMode').value==='free',want:''};
   return{act:true,want:c==='auto'?'':c};
 }
-const ACT={cast:'melempar kail',hook:'mengangkat ikan',reel:'menarik ikan'};
+const ACT={cast:'melempar kail',hook:'strike ikan',reel:'mengangkat ikan'};
 const feed=[];
 function pushFeed(name,action){feed.unshift('@'+String(name||'penonton').slice(0,18)+' → '+(ACT[action]||action));feed.length=Math.min(feed.length,3);$('lcFeed').textContent=feed.join('\n')}
 function cardVisible(){if(!$('lcShowList').checked||!$('lcAuto').checked)return false;try{const st=window.mancingLiveState&&window.mancingLiveState();if(st&&st.ap)return false}catch(e){}return true}
@@ -2733,9 +2796,9 @@ async function runTests(){
       const[k,m]=actMsg(res);r[k](m);
     }
     {const r=mk('Perintah komentar');
-      const cases=[['!lempar','cast'],['!ANGKAT','hook'],['! tarik','reel'],['!mancing','auto'],['halo',null],['!xyz',null]];
+      const cases=[['!lempar','cast'],['Lempar!','cast'],['!STRIKE','hook'],['strike','hook'],['! angkat','reel'],['angkat','reel'],['!mancing','auto'],['halo',null],['angkat tangan sambil nonton',null],['!xyz',null]];
       const bad=cases.filter(c=>parseCmd(c[0])!==c[1]);
-      if(bad.length)r.bad('salah baca: '+bad.map(c=>c[0]).join(', '));else r.ok('!lempar !angkat !tarik !mancing dikenali, komentar biasa diabaikan');}
+      if(bad.length)r.bad('salah baca: '+bad.map(c=>c[0]).join(', '));else r.ok('lempar, strike, angkat, mancing dikenali (dengan/tanpa !), komentar biasa diabaikan');}
     {const r=mk('Notifikasi layar');
       giftBanner({platform:'TEST',username:'tester',giftName:'Rose',count:3});
       banner({icon:'🎣',title:()=>'@tester dapat Ikan Contoh!',sub:'tes tampilan · +0',color:'#3ddc84',key:'c:test',n:1,ms:3000});
