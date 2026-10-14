@@ -1710,6 +1710,7 @@ function landFish(){
   e.count++;e.best=Math.max(e.best,G.weight);if(G.shiny){e.shiny++;S.shinies++;}
   S.caught++;if(d.rar!=='common')S.rareCaught++;S.coins+=val;chipDelta(val,{id:d.id,sh:G.shiny?1:0,val:val});catchNote(d,val,G.shiny,G.weight);
   G.result={d,val,first,zone:G.zone,shiny:G.shiny,w:G.weight};
+  window.dispatchEvent(new CustomEvent('mancing-catch',{detail:{name:d.name,rar:d.rar,rarName:RAR_NAME[d.rar],val:val,valText:fmt(val),w:G.weight,shiny:!!G.shiny,first:first}}));
   if(G.inSpot)moveSpot();
   save();updateHud();
 }
@@ -2527,6 +2528,11 @@ body:has(#app.clean) #lcFab{opacity:.12}
 #lcCard .cf:empty{display:none}
 #lcPanel .lccmd{margin-top:6px;padding:7px 8px;background:#102f40;border-radius:8px;font-size:12px;color:#cfeff5}
 #lcPanel .lccmd b{color:#ffc93c}
+#lcBan{position:fixed;z-index:99995;left:50%;top:176px;transform:translate(-50%,-14px) scale(.9);opacity:0;max-width:min(92vw,420px);box-sizing:border-box;padding:10px 18px;border-radius:16px;background:rgba(3,23,34,.92);border:2px solid var(--bc,#ffc93c);box-shadow:0 0 22px var(--bc,#ffc93c);color:#fff;font:700 15px/1.3 system-ui,sans-serif;text-align:center;pointer-events:none;transition:opacity .25s,transform .25s;word-break:break-word}
+#lcBan.show{opacity:1;transform:translate(-50%,0) scale(1)}
+#lcBan .bi{display:block;font-size:28px;animation:lcb .8s ease-in-out infinite alternate}
+#lcBan small{display:block;font-weight:500;font-size:12px;color:#cfeff5}
+@keyframes lcb{from{transform:translateY(0) rotate(-8deg) scale(1)}to{transform:translateY(-6px) rotate(8deg) scale(1.2)}}
 #lcEvents{font-size:11px;max-height:90px;overflow:auto;white-space:pre-wrap;color:#b9e7ef;margin-top:6px}
 </style>
 <div id="lcCard" hidden>
@@ -2538,6 +2544,7 @@ body:has(#app.clean) #lcFab{opacity:.12}
 <div class="cn">🎁 Gift &amp; ❤️ Like = aksi otomatis</div>
 <div class="cf" id="lcFeed"></div>
 </div>
+<div id="lcBan"></div>
 <button id="lcFab" type="button" aria-label="LIVE Connect" title="LIVE Connect" data-s="off"><svg viewBox="0 0 24 24" fill="none" stroke="#7fe3e6" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2.2" fill="#7fe3e6" stroke="none"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg><i></i></button>
 <div id="lcPanel" hidden>
 <div class="lch"><b>📡 LIVE CONNECT</b><button id="lcClose" type="button" aria-label="Tutup">×</button></div>
@@ -2549,6 +2556,7 @@ body:has(#app.clean) #lcFab{opacity:.12}
 <label for="lcStrike">Durasi strike (detik)</label><select id="lcStrike"><option value="5">5 detik</option><option value="7" selected>7 detik</option><option value="10">10 detik</option></select>
 <label class="lcchk"><input id="lcAuto" type="checkbox"> Auto mode: event LIVE menggerakkan kail (default mati)</label>
 <label for="lcCmdMode">Komentar penonton</label><select id="lcCmdMode"><option value="cmd" selected>Hanya perintah (!lempar !angkat !tarik !mancing)</option><option value="free">Semua komentar menggerakkan kail</option></select>
+<label for="lcUserCd">Anti-spam: jeda per penonton</label><select id="lcUserCd"><option value="3">3 detik</option><option value="6" selected>6 detik</option><option value="10">10 detik</option></select>
 <label class="lcchk"><input id="lcShowList" type="checkbox" checked> Tampilkan daftar perintah di layar (saat Auto aktif)</label>
 <div class="lccmd"><b>!lempar</b> lempar kail · <b>!angkat</b> saat ikan menggigit · <b>!tarik</b> saat ikan melawan · <b>!mancing</b> otomatis sesuai situasi. Gift &amp; like selalu menjalankan aksi berikutnya.</div>
 <div class="lcbtns"><button id="lcConn" type="button">Koneksikan</button><button id="lcDisc" type="button" disabled>Putuskan</button></div>
@@ -2574,6 +2582,7 @@ function sync(){const busy=S.state==='wait'||S.state==='ok'||S.state==='warn';$(
 (()=>{const m=LS.get('lcCmdMode');if(m==='cmd'||m==='free')$('lcCmdMode').value=m;$('lcCmdMode').addEventListener('change',()=>{LS.set('lcCmdMode',$('lcCmdMode').value);updateCard()});
 const sl=LS.get('lcShowList');if(sl==='0')$('lcShowList').checked=false;$('lcShowList').addEventListener('change',()=>{LS.set('lcShowList',$('lcShowList').checked?'1':'0');updateCard()});
 $('lcAuto').addEventListener('change',updateCard)})();
+(()=>{const c=LS.get('lcUserCd');if(['3','6','10'].includes(c))$('lcUserCd').value=c;$('lcUserCd').addEventListener('change',()=>LS.set('lcUserCd',$('lcUserCd').value))})();
 (()=>{const v=LS.get('lcStrike');if(v&&[...$('lcStrike').options].some(o=>o.value===v))$('lcStrike').value=v;$('lcStrike').addEventListener('change',()=>LS.set('lcStrike',$('lcStrike').value))})();
 /* panel buka/tutup; ketikan di panel tidak boleh sampai ke tombol game (Spasi = lempar, L = panel 🤖) */
 ['keydown','keyup','keypress','pointerdown'].forEach(t=>{panel.addEventListener(t,e=>e.stopPropagation());fab.addEventListener(t,e=>e.stopPropagation())});
@@ -2605,14 +2614,32 @@ setInterval(()=>{
   let w='';try{const st=window.mancingLiveState();if(st&&st.started)w=({idle:'cast',bite:'hook',fight:'reel'})[st.state]||''}catch(e){}
   document.querySelectorAll('#lcCard .cr').forEach(r=>r.classList.toggle('on',!!w&&r.dataset.w===w));
 },500);
+const nameOf=d=>String(d.username||d.nickname||'penonton').slice(0,24);
+const userKey=d=>(d.platform||'')+':'+nameOf(d).toLowerCase();
+const U=new Map();let actor=null;
+/* anti-spam: 1 event/detik per penonton, 1 aksi per N detik per penonton; pengirim gift selalu dilayani */
+function spam(d){
+  if(d.kind==='gift')return false;
+  const k=userKey(d),now=Date.now(),u=U.get(k)||{seen:0,acted:0};
+  const flood=now-u.seen<1000;u.seen=now;U.delete(k);U.set(k,u);if(U.size>800)U.delete(U.keys().next().value);
+  return flood||now-u.acted<(Number($('lcUserCd').value)||6)*1000;
+}
+/* banner (gift & tangkapan), antre satu per satu */
+const ban=$('lcBan'),bq=[];let cur=null;
+function renderBan(b){ban.style.setProperty('--bc',b.color);ban.textContent='';const i=document.createElement('span');i.className='bi';i.textContent=b.icon;const x=document.createElement('div');x.textContent=b.title(b.n);ban.append(i,x);if(b.sub){const s=document.createElement('small');s.textContent=b.sub;ban.append(s)}}
+function pump(){if(cur||!bq.length)return;cur=bq.shift();renderBan(cur);ban.classList.add('show');setTimeout(()=>{ban.classList.remove('show');setTimeout(()=>{cur=null;pump()},300)},cur.ms)}
+function banner(b){const same=b.key&&(cur&&cur.key===b.key?cur:bq.find(x=>x.key===b.key));if(same){same.n=Math.max(same.n,b.n);if(same===cur)renderBan(cur);return}if(bq.length>=6)bq.shift();bq.push(b);pump()}
+const giftBanner=d=>{const nm=nameOf(d),g=String(d.giftName||'hadiah').slice(0,30);banner({icon:'🎁',title:n=>'@'+nm+' kirim '+g+(n>1?' ×'+n:''),sub:'Terima kasih!',color:'#ff7ad9',key:'g:'+userKey(d)+':'+g,n:Number(d.count)||1,ms:3200})};
+window.addEventListener('mancing-catch',e=>{const c=e.detail||{};if(!actor||Date.now()-actor.t>120000)return;const nm=actor.name;actor=null;banner({icon:c.shiny?'✨':'🎣',title:()=>'@'+nm+' dapat '+c.name+'!',sub:(c.rarName||c.rar||'')+' · '+Number(c.w||0).toFixed(1)+' kg · +'+(c.valText||c.val),color:'#3ddc84',key:'c:'+Date.now(),n:1,ms:4200})});
 function handleEvent(d,main){
   if(main&&d.platform!=='TEST')S.real++;
-  log((d.platform||'LIVE')+' '+(d.kind||'event')+' — '+(d.username||d.nickname||'penonton')+' '+(d.text||d.giftName||d.count||''));
+  log((d.platform||'LIVE')+' '+(d.kind||'event')+' — '+nameOf(d)+' '+(d.text||d.giftName||d.count||''));
   window.dispatchEvent(new CustomEvent('mancing-live-event',{detail:d}));
+  if(d.kind==='gift')giftBanner(d);
   if($('lcAuto').checked){
-    const w=wantOf(d);if(!w.act)return;
+    const w=wantOf(d);if(!w.act||spam(d))return;
     const r=window.mancingLiveAction?window.mancingLiveAction({...d,want:w.want},strike()):null;
-    if(r&&r.ok){log('AKSI GAME: '+r.action);pushFeed(d.username||d.nickname,r.action)}
+    if(r&&r.ok){log('AKSI GAME: '+r.action);pushFeed(d.username||d.nickname,r.action);actor={name:nameOf(d),t:Date.now()};const u=U.get(userKey(d));if(u)u.acted=Date.now()}
     else if(!r||(r.reason!=='cooldown'&&r.reason!=='waiting-for-next-action'))log('Aksi dilewati: '+((r&&r.reason)||'bridge belum siap'));
     window.dispatchEvent(new CustomEvent('mancing-live-action',{detail:{...d,want:w.want,strikeSeconds:strike(),result:r}}));
   }
@@ -2709,6 +2736,10 @@ async function runTests(){
       const cases=[['!lempar','cast'],['!ANGKAT','hook'],['! tarik','reel'],['!mancing','auto'],['halo',null],['!xyz',null]];
       const bad=cases.filter(c=>parseCmd(c[0])!==c[1]);
       if(bad.length)r.bad('salah baca: '+bad.map(c=>c[0]).join(', '));else r.ok('!lempar !angkat !tarik !mancing dikenali, komentar biasa diabaikan');}
+    {const r=mk('Notifikasi layar');
+      giftBanner({platform:'TEST',username:'tester',giftName:'Rose',count:3});
+      banner({icon:'🎣',title:()=>'@tester dapat Ikan Contoh!',sub:'tes tampilan · +0',color:'#3ddc84',key:'c:test',n:1,ms:3000});
+      r.ok('banner gift & tangkapan tampil di layar (lihat bagian atas)');}
     /* 3. connector */
     const u=normUrl();
     let ws=null;
