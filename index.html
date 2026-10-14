@@ -2451,20 +2451,28 @@ let liveActionAt=0;
 window.mancingLiveState=()=>({ready:!!MODE.ready,started:!!G.started,ui:!!G.ui,state:G.state,ap:!!(document.getElementById('apOn')||{}).checked});
 window.mancingLiveAction=(event,strikeSeconds=7)=>{
   const now=Date.now(); if(now-liveActionAt<1800) return {ok:false,reason:'cooldown'};
-  liveActionAt=now;
   const kind=String(event?.kind||'').toLowerCase();
   // Comments, gifts, likes and configured tap events can trigger an action.
   if(!['comment','gift','like','tap'].includes(kind)) return {ok:false,reason:'unsupported-event'};
   if(document.getElementById('apOn')?.checked) return {ok:false,reason:'autopilot-bawaan-aktif'};
   if(!G.started || !MODE.ready) return {ok:false,reason:'game-not-ready'};
   if(G.ui) return {ok:false,reason:'menu-terbuka'};
+  const want=String(event?.want||'');   // '' = aksi berikutnya apa pun, atau cast / hook / reel
+  const wrong=need=>want&&want!==need;
   if(G.state==='idle'){
+    if(wrong('cast')) return {ok:false,reason:'bukan-saatnya',state:G.state,want};
+    liveActionAt=now;
     pressDown(null);
     if(G.state==='charging') { G.power=.58; pressUp(); return {ok:true,action:'cast'}; }
     return {ok:false,reason:'cannot-cast'};
   }
-  if(G.state==='bite') { pressDown(null); return {ok:true,action:'hook'}; }
+  if(G.state==='bite') {
+    if(wrong('hook')) return {ok:false,reason:'bukan-saatnya',state:G.state,want};
+    liveActionAt=now; pressDown(null); return {ok:true,action:'hook'};
+  }
   if(G.state==='fight') {
+    if(wrong('reel')) return {ok:false,reason:'bukan-saatnya',state:G.state,want};
+    liveActionAt=now;
     pressDown(null);
     const ms=Math.max(500,Math.min(10000,Number(strikeSeconds)||7)*1000);
     setTimeout(()=>{ if(G.pressed) pressUp(); },ms);
@@ -2472,6 +2480,7 @@ window.mancingLiveAction=(event,strikeSeconds=7)=>{
   }
   return {ok:false,reason:'waiting-for-next-action',state:G.state};
 };
+
 })();
 </script>
 
@@ -2505,8 +2514,30 @@ body:has(#app.clean) #lcFab{opacity:.12}
 #lcTests .lcrow em{font-style:normal;color:#9fd3dc}
 #lcTests .lcsum{padding-top:6px;font-weight:800}
 #lcPanel small{display:block;color:#8db7c1;margin-top:6px;line-height:1.35}
+#lcCard{position:fixed;z-index:99990;left:14px;top:200px;width:min(210px,52vw);box-sizing:border-box;padding:9px 11px;border-radius:12px;background:rgba(3,23,34,.8);border:1px solid #2b8495;color:#e9fbff;font:12px/1.35 system-ui,sans-serif;pointer-events:none;backdrop-filter:blur(4px)}
+#lcCard[hidden]{display:none}
+#lcCard .ct{font-weight:800;font-size:13px;margin-bottom:4px}
+#lcCard .ct small{display:block;font-weight:400;color:#9fd3dc;font-size:11px}
+#lcCard .cr{display:flex;gap:8px;padding:3px 5px;border-radius:7px;align-items:baseline}
+#lcCard .cr b{flex:none;min-width:62px;color:#ffc93c}
+#lcCard .cr span{color:#cfeff5}
+#lcCard .cr.on{background:rgba(61,220,132,.22);box-shadow:inset 0 0 0 1px #3ddc84}
+#lcCard .cn{margin-top:4px;color:#9fd3dc;font-size:11px}
+#lcCard .cf{margin-top:5px;border-top:1px solid #153b4d;padding-top:4px;font-size:11px;color:#b9e7ef;white-space:pre-line}
+#lcCard .cf:empty{display:none}
+#lcPanel .lccmd{margin-top:6px;padding:7px 8px;background:#102f40;border-radius:8px;font-size:12px;color:#cfeff5}
+#lcPanel .lccmd b{color:#ffc93c}
 #lcEvents{font-size:11px;max-height:90px;overflow:auto;white-space:pre-wrap;color:#b9e7ef;margin-top:6px}
 </style>
+<div id="lcCard" hidden>
+<div class="ct">🎣 CARA MAIN<small>ketik di kolom komentar</small></div>
+<div class="cr" data-w="cast"><b>!lempar</b><span>lempar kail</span></div>
+<div class="cr" data-w="hook"><b>!angkat</b><span>saat ikan menggigit</span></div>
+<div class="cr" data-w="reel"><b>!tarik</b><span>saat ikan melawan</span></div>
+<div class="cr" data-w="auto"><b>!mancing</b><span>otomatis sesuai situasi</span></div>
+<div class="cn">🎁 Gift &amp; ❤️ Like = aksi otomatis</div>
+<div class="cf" id="lcFeed"></div>
+</div>
 <button id="lcFab" type="button" aria-label="LIVE Connect" title="LIVE Connect" data-s="off"><svg viewBox="0 0 24 24" fill="none" stroke="#7fe3e6" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2.2" fill="#7fe3e6" stroke="none"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg><i></i></button>
 <div id="lcPanel" hidden>
 <div class="lch"><b>📡 LIVE CONNECT</b><button id="lcClose" type="button" aria-label="Tutup">×</button></div>
@@ -2517,6 +2548,9 @@ body:has(#app.clean) #lcFab{opacity:.12}
 <label for="lcYoutube">YouTube: URL live atau ID video LIVE</label><input id="lcYoutube" type="text" placeholder="https://youtube.com/watch?v=..." autocomplete="off" autocapitalize="off" spellcheck="false">
 <label for="lcStrike">Durasi strike (detik)</label><select id="lcStrike"><option value="5">5 detik</option><option value="7" selected>7 detik</option><option value="10">10 detik</option></select>
 <label class="lcchk"><input id="lcAuto" type="checkbox"> Auto mode: event LIVE menggerakkan kail (default mati)</label>
+<label for="lcCmdMode">Komentar penonton</label><select id="lcCmdMode"><option value="cmd" selected>Hanya perintah (!lempar !angkat !tarik !mancing)</option><option value="free">Semua komentar menggerakkan kail</option></select>
+<label class="lcchk"><input id="lcShowList" type="checkbox" checked> Tampilkan daftar perintah di layar (saat Auto aktif)</label>
+<div class="lccmd"><b>!lempar</b> lempar kail · <b>!angkat</b> saat ikan menggigit · <b>!tarik</b> saat ikan melawan · <b>!mancing</b> otomatis sesuai situasi. Gift &amp; like selalu menjalankan aksi berikutnya.</div>
 <div class="lcbtns"><button id="lcConn" type="button">Koneksikan</button><button id="lcDisc" type="button" disabled>Putuskan</button></div>
 <button id="lcTest" type="button">🧪 Tes Semua</button>
 <div id="lcTests"></div>
@@ -2537,6 +2571,9 @@ function setState(s,msg){S.state=s;fab.dataset.s=s;if(msg!=null){status(msg);if(
 function sync(){const busy=S.state==='wait'||S.state==='ok'||S.state==='warn';$('lcConn').disabled=busy;$('lcDisc').disabled=!busy&&!S.timer}
 /* simpan isian terakhir */
 ['lcUrl','lcToken','lcTikTok','lcYoutube'].forEach(id=>{const v=LS.get(id);if(v)$(id).value=v;$(id).addEventListener('input',()=>LS.set(id,$(id).value.trim()))});
+(()=>{const m=LS.get('lcCmdMode');if(m==='cmd'||m==='free')$('lcCmdMode').value=m;$('lcCmdMode').addEventListener('change',()=>{LS.set('lcCmdMode',$('lcCmdMode').value);updateCard()});
+const sl=LS.get('lcShowList');if(sl==='0')$('lcShowList').checked=false;$('lcShowList').addEventListener('change',()=>{LS.set('lcShowList',$('lcShowList').checked?'1':'0');updateCard()});
+$('lcAuto').addEventListener('change',updateCard)})();
 (()=>{const v=LS.get('lcStrike');if(v&&[...$('lcStrike').options].some(o=>o.value===v))$('lcStrike').value=v;$('lcStrike').addEventListener('change',()=>LS.set('lcStrike',$('lcStrike').value))})();
 /* panel buka/tutup; ketikan di panel tidak boleh sampai ke tombol game (Spasi = lempar, L = panel 🤖) */
 ['keydown','keyup','keypress','pointerdown'].forEach(t=>{panel.addEventListener(t,e=>e.stopPropagation());fab.addEventListener(t,e=>e.stopPropagation())});
@@ -2550,11 +2587,35 @@ function mixed(u){if(location.protocol!=='https:'||!/^ws:\/\//i.test(u))return f
 function wsFor(u){const t=$('lcToken').value.trim();return new WebSocket(t?u+(u.includes('?')?'&':'?')+'token='+encodeURIComponent(t):u)}
 const cfg=()=>JSON.stringify({type:'configure',tiktokUsername:$('lcTikTok').value.trim().replace(/^@/,''),youtubeLive:$('lcYoutube').value.trim(),auto:$('lcAuto').checked,strikeSeconds:strike()});
 /* event dari connector → game */
+const CMD={cast:['lempar','cast'],hook:['angkat','hook'],reel:['tarik','reel'],auto:['mancing']};
+function parseCmd(text){const m=String(text==null?'':text).trim().toLowerCase().match(/^!\s*([a-z]+)/);if(!m)return null;for(const k in CMD)if(CMD[k].includes(m[1]))return k;return null}
+function wantOf(d){
+  if(d.kind!=='comment')return{act:true,want:''};
+  const c=parseCmd(d.text);
+  if(!c)return{act:$('lcCmdMode').value==='free',want:''};
+  return{act:true,want:c==='auto'?'':c};
+}
+const ACT={cast:'melempar kail',hook:'mengangkat ikan',reel:'menarik ikan'};
+const feed=[];
+function pushFeed(name,action){feed.unshift('@'+String(name||'penonton').slice(0,18)+' → '+(ACT[action]||action));feed.length=Math.min(feed.length,3);$('lcFeed').textContent=feed.join('\n')}
+function cardVisible(){if(!$('lcShowList').checked||!$('lcAuto').checked)return false;try{const st=window.mancingLiveState&&window.mancingLiveState();if(st&&st.ap)return false}catch(e){}return true}
+function updateCard(){$('lcCard').hidden=!cardVisible();$('lcCard').querySelector('.ct small').textContent=$('lcCmdMode').value==='free'?'komentar apa saja juga bisa':'ketik di kolom komentar'}
+setInterval(()=>{
+  const v=cardVisible();$('lcCard').hidden=!v;if(!v)return;
+  let w='';try{const st=window.mancingLiveState();if(st&&st.started)w=({idle:'cast',bite:'hook',fight:'reel'})[st.state]||''}catch(e){}
+  document.querySelectorAll('#lcCard .cr').forEach(r=>r.classList.toggle('on',!!w&&r.dataset.w===w));
+},500);
 function handleEvent(d,main){
   if(main&&d.platform!=='TEST')S.real++;
   log((d.platform||'LIVE')+' '+(d.kind||'event')+' — '+(d.username||d.nickname||'penonton')+' '+(d.text||d.giftName||d.count||''));
   window.dispatchEvent(new CustomEvent('mancing-live-event',{detail:d}));
-  if($('lcAuto').checked){const r=window.mancingLiveAction?window.mancingLiveAction(d,strike()):null;log(r&&r.ok?'AKSI GAME: '+r.action:'Aksi dilewati: '+((r&&r.reason)||'bridge belum siap'));window.dispatchEvent(new CustomEvent('mancing-live-action',{detail:{...d,strikeSeconds:strike(),result:r}}))}
+  if($('lcAuto').checked){
+    const w=wantOf(d);if(!w.act)return;
+    const r=window.mancingLiveAction?window.mancingLiveAction({...d,want:w.want},strike()):null;
+    if(r&&r.ok){log('AKSI GAME: '+r.action);pushFeed(d.username||d.nickname,r.action)}
+    else if(!r||(r.reason!=='cooldown'&&r.reason!=='waiting-for-next-action'))log('Aksi dilewati: '+((r&&r.reason)||'bridge belum siap'));
+    window.dispatchEvent(new CustomEvent('mancing-live-action',{detail:{...d,want:w.want,strikeSeconds:strike(),result:r}}));
+  }
 }
 window.addEventListener('mancing-live-event',e=>{const d=e.detail||{};if(d.kind==='tap'||d.kind==='like')window.dispatchEvent(new CustomEvent('mancing-live-tap',{detail:d}))});
 function route(m,main){
@@ -2611,6 +2672,7 @@ function actMsg(res){
   switch(res.reason){
     case 'waiting-for-next-action':return['ok','diterima, game sedang menunggu (status '+res.state+')'];
     case 'cooldown':return['warn','terlalu cepat (cooldown 1,8 dtk)'];
+    case 'bukan-saatnya':return['ok','perintah salah waktu ditolak dengan benar'];
     case 'menu-terbuka':return['warn','menu/toko sedang terbuka, tutup dulu'];
     case 'autopilot-bawaan-aktif':return['warn','autopilot bawaan (🤖) aktif, matikan dulu'];
     case 'game-not-ready':return['bad','game belum dimulai'];
@@ -2643,6 +2705,10 @@ async function runTests(){
       const res=window.mancingLiveAction({at:Date.now(),platform:'TEST',kind:kinds[i][0],username:'tester',text:'tes',giftName:'Rose',count:1},strike());
       const[k,m]=actMsg(res);r[k](m);
     }
+    {const r=mk('Perintah komentar');
+      const cases=[['!lempar','cast'],['!ANGKAT','hook'],['! tarik','reel'],['!mancing','auto'],['halo',null],['!xyz',null]];
+      const bad=cases.filter(c=>parseCmd(c[0])!==c[1]);
+      if(bad.length)r.bad('salah baca: '+bad.map(c=>c[0]).join(', '));else r.ok('!lempar !angkat !tarik !mancing dikenali, komentar biasa diabaikan');}
     /* 3. connector */
     const u=normUrl();
     let ws=null;
@@ -2692,7 +2758,7 @@ async function runTests(){
     /* 6. event nyata */
     {const r=mk('Event LIVE nyata');
       if(S.real>0)r.ok(S.real+' event nyata sudah masuk');
-      else r.warn('belum ada; setelah Koneksikan, kirim komentar/like ke live Anda lalu lihat log');}
+      else r.warn('belum ada; setelah Koneksikan, kirim komentar "!lempar" atau like ke live Anda lalu lihat log');}
   }finally{
     if(tmp){try{tmp.close()}catch(e){}}
     S.hook=null;
@@ -2702,6 +2768,7 @@ async function runTests(){
 }
 $('lcTest').addEventListener('click',runTests);
 window.mancingLiveSelfTest=runTests;
+updateCard();
 sync();
 })();
 </script>
