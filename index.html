@@ -2454,7 +2454,7 @@ window.mancingLiveAction=(event,strikeSeconds=7)=>{
   const now=Date.now(); if(now-liveActionAt<1200) return {ok:false,reason:'cooldown'};
   const kind=String(event?.kind||'').toLowerCase();
   // Comments, gifts, likes and configured tap events can trigger an action.
-  if(!['comment','gift','like','tap'].includes(kind)) return {ok:false,reason:'unsupported-event'};
+  if(!['comment','gift','like','tap','superchat','member','subscribe'].includes(kind)) return {ok:false,reason:'unsupported-event'};
   if(document.getElementById('apOn')?.checked) return {ok:false,reason:'autopilot-bawaan-aktif'};
   if(!G.started || !MODE.ready) return {ok:false,reason:'game-not-ready'};
   if(G.ui) return {ok:false,reason:'menu-terbuka'};
@@ -2698,8 +2698,8 @@ function handleEvent(d,main){
   if(main&&d.platform!=='TEST')S.real++;
   log((d.platform||'LIVE')+' '+(d.kind||'event')+' — '+nameOf(d)+' '+(d.text||d.giftName||d.count||''));
   window.dispatchEvent(new CustomEvent('mancing-live-event',{detail:d}));
-  if(d.kind==='gift')giftBanner(d);
-  if($('lcAuto').checked){
+  if(window.LiveFX&&LiveFX.handle(d)){}else if(d.kind==='gift')giftBanner(d);
+  if($('lcAuto').checked&&!['follow','share','like','superchat','member','subscribe'].includes(d.kind)){
     const w=wantOf(d);if(!w.act||spam(d))return;
     const r=window.mancingLiveAction?window.mancingLiveAction({...d,want:w.want},strike()):null;
     if(r&&r.ok){log('AKSI GAME: '+r.action);pushFeed(d.username||d.nickname,r.action);actor={name:nameOf(d),t:Date.now()};const u=U.get(userKey(d));if(u)u.acted=Date.now()}
@@ -2867,4 +2867,143 @@ sync();
 })();
 </script>
 
+<style id="lfxCss">
+#lfxCv{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:99990}
+#lfxBig{position:fixed;left:0;right:0;top:14%;z-index:99991;display:flex;justify-content:center;pointer-events:none}
+.lfxCard{--c:#ffc93c;--c2:#ff7a1a;position:relative;min-width:260px;max-width:92vw;padding:16px 28px 14px;border-radius:20px;text-align:center;color:#fff;font-family:system-ui,sans-serif;
+ background:linear-gradient(135deg,rgba(10,16,34,.92),rgba(30,10,50,.92));border:3px solid var(--c);box-shadow:0 0 30px var(--c),0 0 90px var(--c2),inset 0 0 30px rgba(255,255,255,.08);
+ animation:lfxIn .7s cubic-bezier(.2,1.6,.4,1) both}
+.lfxCard.out{animation:lfxOut .5s ease-in both}
+.lfxCard .lt{font-size:12px;font-weight:900;letter-spacing:.35em;color:var(--c);text-transform:uppercase}
+.lfxCard .li{font-size:64px;line-height:1.1;filter:drop-shadow(0 0 14px var(--c));animation:lfxPulse .9s ease-in-out infinite}
+.lfxCard .li img{height:84px;width:auto}
+.lfxCard .ln{font-size:26px;font-weight:900;text-shadow:0 0 12px var(--c);word-break:break-word}
+.lfxCard .lg{font-size:17px;font-weight:700;opacity:.95}
+.lfxCard .lv{display:inline-block;margin-top:6px;padding:3px 14px;border-radius:99px;background:linear-gradient(90deg,var(--c),var(--c2));color:#1a0b00;font-weight:900;font-size:15px}
+.lfxCard.t3,.lfxCard.t4,.lfxCard.t5{animation:lfxIn .7s cubic-bezier(.2,1.6,.4,1) both,lfxShake .6s .4s 2}
+.lfxCard.t5{padding:24px 44px;border-image:linear-gradient(90deg,#f0f,#0ff,#ff0,#f0f) 1;animation:lfxIn .8s cubic-bezier(.2,1.6,.4,1) both,lfxHue 2s linear infinite}
+.lfxCard.t5 .ln{font-size:34px}.lfxCard.t5 .li{font-size:84px}.lfxCard.t4 .li{font-size:76px}
+#lfxFlash{position:fixed;inset:0;z-index:99989;pointer-events:none;opacity:0;background:radial-gradient(circle,var(--fc,#fff) 0,transparent 70%)}
+#lfxFlash.go{animation:lfxFlash .9s ease-out}
+#lfxToasts{position:fixed;left:10px;top:70px;z-index:99992;display:flex;flex-direction:column;gap:6px;pointer-events:none;max-width:78vw}
+.lfxToast{display:flex;align-items:center;gap:8px;padding:7px 14px 7px 10px;border-radius:99px;background:rgba(8,18,32,.88);border:2px solid var(--c);color:#fff;font:700 14px system-ui,sans-serif;box-shadow:0 0 14px var(--c);animation:lfxSlide .4s ease-out both}
+.lfxToast.out{animation:lfxSlideOut .4s ease-in both}
+.lfxToast b{font-size:20px}
+@keyframes lfxIn{0%{transform:scale(.2) rotate(-12deg);opacity:0}100%{transform:none;opacity:1}}
+@keyframes lfxOut{to{transform:translateY(-40px) scale(.8);opacity:0}}
+@keyframes lfxPulse{50%{transform:scale(1.15) rotate(4deg)}}
+@keyframes lfxShake{0%,100%{translate:0}20%{translate:-8px 3px}40%{translate:8px -3px}60%{translate:-6px -2px}80%{translate:6px 2px}}
+@keyframes lfxHue{to{filter:hue-rotate(360deg)}}
+@keyframes lfxFlash{0%{opacity:.85}100%{opacity:0}}
+@keyframes lfxSlide{from{transform:translateX(-120%);opacity:0}to{transform:none;opacity:1}}
+@keyframes lfxSlideOut{to{transform:translateX(-120%);opacity:0}}
+</style>
+<script>
+(function(){
+'use strict';
+const TIERS=[
+ {n:'BRONZE',c:'#cd7f32',c2:'#ffb273',em:['🥉','✨'],p:40,ms:3500},
+ {n:'SILVER',c:'#cfd8e3',c2:'#7fb4ff',em:['🥈','⭐'],p:90,ms:4200},
+ {n:'GOLD',c:'#ffc93c',c2:'#ff7a1a',em:['🥇','💰','⭐'],p:170,ms:5000},
+ {n:'PLATINUM',c:'#5ff2ff',c2:'#9b6bff',em:['💎','✨','💠'],p:300,ms:6000},
+ {n:'DIAMOND',c:'#7aa8ff',c2:'#ff4fd8',em:['💎','👑','🔥','✨'],p:520,ms:7500},
+ {n:'LEGEND',c:'#ff3d6e',c2:'#ffe14a',em:['👑','🔥','🌈','💎','🎆','🚀'],p:900,ms:10000}
+];
+const cv=document.createElement('canvas');cv.id='lfxCv';
+const big=document.createElement('div');big.id='lfxBig';
+const fl=document.createElement('div');fl.id='lfxFlash';
+const tw=document.createElement('div');tw.id='lfxToasts';
+const ready=()=>{document.body.append(cv,fl,big,tw);resize();loop()};
+const ctx=cv.getContext('2d');let W=0,H=0,DPR=1;
+function resize(){DPR=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',resize);
+const P=[];let MAXP=1400;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+function spawn(o){if(P.length<MAXP)P.push(o)}
+function confetti(n,cols){for(let i=0;i<n;i++)spawn({k:'r',x:rnd(0,W),y:rnd(-H*.3,-10),vx:rnd(-1.5,1.5),vy:rnd(2,6),g:.05,w:rnd(6,12),h:rnd(4,8),a:rnd(0,6),va:rnd(-.3,.3),col:cols[i%cols.length],life:rnd(140,260)})}
+function burst(x,y,n,cols,spd){for(let i=0;i<n;i++){const a=rnd(0,6.283),s=rnd(1,spd);spawn({k:'c',x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,g:.06,r:rnd(1.5,3.5),col:cols[i%cols.length],life:rnd(50,100),max:100,trail:1})}}
+function emojiRain(n,list){for(let i=0;i<n;i++)spawn({k:'e',x:rnd(0,W),y:rnd(-H*.4,-20),vx:rnd(-1,1),vy:rnd(2,5),g:.02,s:rnd(22,46),e:list[i%list.length],a:rnd(-.5,.5),va:rnd(-.05,.05),life:rnd(150,260)})}
+function fountain(side,n,cols){for(let i=0;i<n;i++)spawn({k:'c',x:side?W:0,y:H,vx:(side?-1:1)*rnd(3,9),vy:-rnd(10,19),g:.25,r:rnd(2,4),col:cols[i%cols.length],life:rnd(90,150),max:150})}
+function loop(){ctx.clearRect(0,0,W,H);
+ for(let i=P.length-1;i>=0;i--){const p=P[i];p.life--;p.vy+=p.g;p.x+=p.vx;p.y+=p.vy;
+  if(p.life<=0||p.y>H+60){P.splice(i,1);continue}
+  const al=Math.min(1,p.life/40);ctx.globalAlpha=al;
+  if(p.k==='r'){p.a+=p.va;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.a);ctx.fillStyle=p.col;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore()}
+  else if(p.k==='c'){ctx.fillStyle=p.col;ctx.shadowColor=p.col;ctx.shadowBlur=8;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.283);ctx.fill();ctx.shadowBlur=0}
+  else{p.a+=p.va;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.a);ctx.font=p.s+'px serif';ctx.textAlign='center';ctx.fillText(p.e,0,0);ctx.restore()}
+ }
+ ctx.globalAlpha=1;requestAnimationFrame(loop)}
+/* suara */
+let AC=null;
+function tone(f,t,d,type,v){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.type=type||'triangle';o.frequency.value=f;const s=AC.currentTime+t;g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(v||.12,s+.02);g.gain.exponentialRampToValueAtTime(.001,s+d);o.connect(g).connect(AC.destination);o.start(s);o.stop(s+d+.05)}catch(e){}}
+function fanfare(t){if(!sndOn())return;const base=[523,659,784,988,1175,1568];const n=Math.min(8,3+t*1.2|0);for(let i=0;i<n;i++)tone(base[i%6]*(i>5?2:1),i*.09,.35,'triangle',.1);if(t>=3)tone(131,0,1.2,'sawtooth',.08);if(t>=5)for(let i=0;i<6;i++)tone(1568+i*130,.8+i*.07,.25,'square',.06)}
+let muted=false;const sndOn=()=>!muted;
+/* nilai & tier */
+const USD={USD:1,EUR:1.08,GBP:1.27,IDR:.000062,JPY:.0067,SGD:.74,MYR:.22,PHP:.017,AUD:.65,CAD:.73,INR:.012,KRW:.00073,THB:.028,BRL:.18,MXN:.055,TWD:.031,HKD:.128,VND:.00004};
+function parseAmt(d){const a=Number(d.amount)||0;let cur=String(d.currency||'USD').toUpperCase().replace(/[^A-Z]/g,'');return a*(USD[cur]??1)}
+function tierDiamond(x){return x>=20000?5:x>=5000?4:x>=1000?3:x>=200?2:x>=50?1:0}
+function tierUsd(x){return x>=200?5:x>=100?4:x>=20?3:x>=10?2:x>=5?1:0}
+function tierMonths(m){return m>=24?5:m>=12?4:m>=6?3:m>=3?2:m>=2?1:0}
+/* tampilan */
+const q=[];let busy=false;
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+function show(o){q.push(o);if(q.length>8)q.splice(0,q.length-8).forEach(()=>{});pump()}
+function pump(){if(busy||!q.length)return;busy=true;const o=q.shift(),T=TIERS[o.t];
+ const card=el('div','lfxCard t'+o.t);card.style.setProperty('--c',T.c);card.style.setProperty('--c2',T.c2);
+ card.append(el('div','lt',o.label+' • '+T.n));
+ const li=el('div','li');if(o.img){const im=new Image();im.referrerPolicy='no-referrer';im.src=o.img;im.alt='';im.onerror=()=>{li.textContent=o.icon};li.appendChild(im)}else li.textContent=o.icon;card.append(li);
+ card.append(el('div','ln','@'+o.name));card.append(el('div','lg',o.line));if(o.val)card.append(el('div','lv',o.val));
+ big.textContent='';big.appendChild(card);
+ fl.style.setProperty('--fc',T.c);fl.classList.remove('go');void fl.offsetWidth;fl.classList.add('go');
+ fanfare(o.t);effects(o.t,T);
+ setTimeout(()=>{card.classList.add('out');setTimeout(()=>{card.remove();busy=false;pump()},500)},T.ms)}
+function effects(t,T){const cols=[T.c,T.c2,'#fff'];
+ confetti(T.p,cols);
+ const bursts=[1,2,4,7,10,16][t];for(let i=0;i<bursts;i++)setTimeout(()=>burst(rnd(W*.15,W*.85),rnd(H*.1,H*.5),50+t*14,cols,4+t),i*Math.max(150,T.ms/(bursts+1)));
+ if(t>=2)emojiRain(10+t*8,T.em);
+ if(t>=3){fountain(0,60+t*20,cols);fountain(1,60+t*20,cols)}
+ if(t>=5){const iv=setInterval(()=>{confetti(60,['#f0f','#0ff','#ff0','#fff','#f55']);emojiRain(8,T.em)},900);setTimeout(()=>clearInterval(iv),T.ms-1000)}}
+/* notif kecil */
+function toast(icon,text,c){const t=el('div','lfxToast');t.style.setProperty('--c',c);t.append(el('b',null,icon),el('span',null,text));tw.appendChild(t);while(tw.children.length>4)tw.firstChild.remove();
+ setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),400)},3200)}
+const nm=d=>String(d.username||d.nickname||'penonton').slice(0,24);
+const agg={};
+function aggToast(kind,icon,txt,c){const d=agg[kind]||(agg[kind]={n:0,timer:0,names:[]});return d}
+function handle(d){
+ const k=d.kind;
+ if(k==='follow'){toast('➕','@'+nm(d)+' mulai mengikuti!','#4fe38b');return true}
+ if(k==='share'){toast('🔗','@'+nm(d)+' membagikan LIVE!','#4fc3ff');return true}
+ if(k==='like'){const c=Math.max(1,Number(d.count)||1);const a=agg.like||(agg.like={n:0,t:0,who:''});a.n+=c;a.who=nm(d);if(!a.t)a.t=setTimeout(()=>{toast('❤️','@'+a.who+' & penonton: '+a.n+' like','#ff5c8a');a.n=0;a.t=0},1500);return true}
+ if(k==='subscribe'&&d.platform==='YouTube'){toast('🔔','@'+nm(d)+' subscribe!','#ff4040');return true}
+ if(k==='gift'){const dia=Number(d.diamonds)||0;
+  if(!dia){return false}
+  const t=tierDiamond(dia);
+  if(t===0&&dia<10){toast('🎁','@'+nm(d)+' kirim '+String(d.giftName||'gift').slice(0,24)+(d.count>1?' ×'+d.count:''),'#ff7ad9');return true}
+  show({label:'GIFT',t,icon:'🎁',img:/^https:\/\//.test(d.giftImg||'')?d.giftImg:'',name:nm(d),line:String(d.giftName||'gift').slice(0,30)+(d.count>1?' ×'+d.count:''),val:'💎 '+dia.toLocaleString('id-ID')+' diamond'});return true}
+ if(k==='superchat'){const usd=parseAmt(d),t=tierUsd(usd);
+  show({label:d.sticker?'SUPER STICKER':'SUPER CHAT',t,icon:'💬',name:nm(d),line:String(d.text||'Terima kasih!').slice(0,80),val:(d.currency||'')+' '+Number(d.amount||0).toLocaleString('id-ID')});return true}
+ if(k==='member'||k==='subscribe'){const m=Math.max(1,Number(d.months)||1),t=tierMonths(m);
+  show({label:d.platform==='YouTube'?'MEMBER BARU':'LANGGANAN',t,icon:'👑',name:nm(d),line:m>1?'Langganan '+m+' bulan berturut-turut!':'Bergabung jadi member!',val:m>1?m+' bulan':'NEW'});return true}
+ return false}
+const TEST=[
+ ['follow',{}],['share',{}],['like',{count:15}],
+ ['gift',{giftName:'Rose',count:1,diamonds:1}],['gift',{giftName:'Heart Me',count:5,diamonds:25}],
+ ['gift',{giftName:'Perfume',count:3,diamonds:60}],['gift',{giftName:'Money Gun',count:1,diamonds:500}],
+ ['gift',{giftName:'Lion',count:1,diamonds:29999}],['gift',{giftName:'TikTok Universe',count:1,diamonds:34999}],
+ ['superchat',{amount:2,currency:'USD',text:'Semangat kak!'}],['superchat',{amount:50,currency:'USD',text:'Mantap banget live-nya'}],['superchat',{amount:2000000,currency:'IDR',text:'SULTAN LEWAT 👑'}],
+ ['member',{months:1}],['subscribe',{months:12,platform:'TikTok'}]
+];
+window.LiveFX={handle,show,toast,tiers:TIERS,setMuted(v){muted=!!v},
+ test(i){const a=TEST[i%TEST.length];handle({platform:'TEST',username:'penonton'+(i%9),...a[1],kind:a[0]})},
+ testAll(){TEST.forEach((a,i)=>setTimeout(()=>window.LiveFX.test(i),i*(a[0]==='gift'||a[0]==='superchat'||a[0]==='member'?600:300)))}};
+if(document.body)ready();else addEventListener('DOMContentLoaded',ready);
+/* tombol tes animasi di panel */
+function addBtn(){const t=document.getElementById('lcTest');if(!t||document.getElementById('lfxTestBtn'))return;
+ const b=el('button',null,'🎆 Tes Animasi Gift/Tier');b.id='lfxTestBtn';b.type='button';b.style.cssText='display:block;width:100%;margin-top:8px;padding:9px;border:0;border-radius:8px;background:#ff7ad9;color:#2a0020;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit';
+ b.addEventListener('click',()=>window.LiveFX.testAll());
+ const l=el('label','lcchk');const cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.addEventListener('change',()=>window.LiveFX.setMuted(!cb.checked));l.append(cb,' Suara animasi');
+ t.insertAdjacentElement('afterend',b);b.insertAdjacentElement('afterend',l)}
+if(document.readyState==='loading')addEventListener('DOMContentLoaded',addBtn);else addBtn();
+})();
+</script>
 </body></html>

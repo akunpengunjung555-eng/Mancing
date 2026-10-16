@@ -72,7 +72,17 @@ wss.on('connection', ws => {
         const ttUser = d => String(d?.user?.uniqueId || d?.user?.displayId || d?.user?.nickname || d?.uniqueId || d?.nickname || d?.user?.id || 'viewer');
         const ttGift = d => String(d?.gift?.name || d?.gift?.giftName || d?.giftDetails?.giftName || d?.giftName || d?.giftId || 'gift');
         conn.on(WebcastEvent.CHAT, d => emit(ws, { platform: 'TikTok', kind: 'comment', username: ttUser(d), text: clean(d?.content ?? d?.comment ?? '', 500) }));
-        conn.on(WebcastEvent.GIFT, d => emit(ws, { platform: 'TikTok', kind: 'gift', username: ttUser(d), giftName: ttGift(d), count: Number(d?.repeatCount) || 1 }));
+        conn.on(WebcastEvent.GIFT, d => {
+          if (d?.giftType === 1 && !d?.repeatEnd) return; // streak masih jalan, kirim saat selesai
+          const unit = Number(d?.gift?.diamondCount ?? d?.giftDetails?.diamondCount ?? d?.diamondCount) || 0;
+          const count = Number(d?.repeatCount) || 1;
+          const img = String(d?.gift?.image?.urlList?.[0] || d?.giftDetails?.giftImage?.giftPictureUrl || '');
+          emit(ws, { platform: 'TikTok', kind: 'gift', username: ttUser(d), giftName: ttGift(d), count, unit, diamonds: unit * count, giftImg: /^https:\/\//.test(img) ? clean(img, 300) : '' });
+        });
+        const onT = (ev, fn) => { if (ev) conn.on(ev, fn); };
+        onT(WebcastEvent.FOLLOW, d => emit(ws, { platform: 'TikTok', kind: 'follow', username: ttUser(d) }));
+        onT(WebcastEvent.SHARE, d => emit(ws, { platform: 'TikTok', kind: 'share', username: ttUser(d) }));
+        onT(WebcastEvent.SUBSCRIBE, d => emit(ws, { platform: 'TikTok', kind: 'subscribe', username: ttUser(d), months: Number(d?.subMonth) || 1 }));
         conn.on(WebcastEvent.LIKE, d => emit(ws, { platform: 'TikTok', kind: 'like', username: ttUser(d), count: Number(d?.count ?? d?.likeCount) || 1 }));
         await conn.connect(); statuses.push(`TikTok tersambung: @${tt}`);
       } catch (e) { try { session.tiktok?.disconnect(); } catch {} session.tiktok = null; send(ws, { type: 'error', message: `TikTok @${tt}: ${clean(e?.message || e, 300)}` }); }
@@ -80,7 +90,13 @@ wss.on('connection', ws => {
     if (yt) {
       try {
         const chat = new LiveChat(yt.opts); session.youtube = chat;
-        chat.on('chat', item => emit(ws, { platform: 'YouTube', kind: 'comment', username: item.author?.name || item.authorName || 'viewer', text: Array.isArray(item.message) ? item.message.map(x => x.text || '').join('') : clean(item.message, 1000) }));
+        chat.on('chat', item => {
+          const text = clean(Array.isArray(item.message) ? item.message.map(x => x.text || '').join('') : item.message, 500);
+          const base = { platform: 'YouTube', username: item.author?.name || item.authorName || 'viewer', text };
+          if (item.superchat) emit(ws, { ...base, kind: 'superchat', amount: Number(item.superchat.amount) || 0, currency: clean(item.superchat.currency || '', 8), color: clean(item.superchat.color || '', 20), sticker: Boolean(item.superchat.sticker) });
+          else if (item.isMembership) emit(ws, { ...base, kind: 'member', months: 1 });
+          else emit(ws, { ...base, kind: 'comment' });
+        });
         chat.on('error', e => send(ws, { type: 'error', message: `YouTube: ${clean(e?.message || e, 300)}` }));
         const started = await chat.start();
         if (started === false) throw new Error('Tidak bisa membaca live chat. Pastikan channel/siaran sedang LIVE dan username/URL benar.');
