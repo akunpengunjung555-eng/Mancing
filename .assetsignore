@@ -1,0 +1,9 @@
+worker.js
+wrangler.toml
+server.js
+.assetsignore
+node_modules
+.wrangler
+*.zip
+package.json
+package-lock.json

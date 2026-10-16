@@ -1,5 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Mancing Laut Dalam</title>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><title>Mancing Laut Dalam</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#04202e">
 <meta name="mobile-web-app-capable" content="yes">
@@ -7,6 +6,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script>if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}</script>
+</head><body>
 <style>
 /* Layout: kanvas 3D penuh layar, HUD kaca di atas, tombol aksi bulat di bawah, sheet naik dari bawah */
 :root{
@@ -3347,4 +3347,10 @@ function addBtn(){const t=document.getElementById('lcTest');if(!t||document.getE
 if(document.readyState==='loading')addEventListener('DOMContentLoaded',addBtn);else addBtn();
 })();
 </script>
+<button id="pwaInstall" hidden style="position:fixed;right:12px;top:calc(12px + env(safe-area-inset-top,0px));z-index:99999;padding:10px 16px;border:0;border-radius:999px;background:#ffc93c;color:#031722;font:700 14px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:pointer">⬇ Pasang Aplikasi</button>
+<script>(function(){var b=document.getElementById('pwaInstall'),d=null;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();d=e;b.hidden=false;});
+b.addEventListener('click',function(){if(!d)return;d.prompt();d.userChoice.then(function(){d=null;b.hidden=true;});});
+window.addEventListener('appinstalled',function(){b.hidden=true;});
+if(window.matchMedia('(display-mode: standalone)').matches)b.hidden=true;})();</script>
 </body></html>
