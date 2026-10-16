@@ -23,14 +23,28 @@ function closeSession(ws) {
   try { s.youtube?.stop(); } catch {}
   sessions.delete(ws);
 }
-function getYoutubeId(input) {
+function getYoutubeTarget(input) {
   if (!input) return null;
   const text = input.trim();
+  const asHandle = h => { h = h.replace(/^@/, ''); return /^[\w.\-]{3,60}$/.test(h) ? { opts: { handle: '@' + h }, label: '@' + h } : null; };
   try {
     const u = new URL(text);
-    if (u.hostname.endsWith('youtu.be')) return u.pathname.split('/').filter(Boolean)[0] || null;
-    return u.searchParams.get('v') || u.pathname.match(/\/(?:live|embed|shorts)\/([^/?]+)/)?.[1] || null;
-  } catch { return /^[\w-]{11}$/.test(text) ? text : null; }
+    if (u.hostname.endsWith('youtu.be')) {
+      const id = u.pathname.split('/').filter(Boolean)[0];
+      return id ? { opts: { liveId: id }, label: id } : null;
+    }
+    const h = u.pathname.match(/\/(@[^/?#]+)/)?.[1];
+    if (h) return asHandle(decodeURIComponent(h));
+    const ch = u.pathname.match(/\/channel\/(UC[\w-]{22})/)?.[1];
+    if (ch) return { opts: { channelId: ch }, label: ch };
+    const id = u.searchParams.get('v') || u.pathname.match(/\/(?:live|embed|shorts)\/([^/?]+)/)?.[1];
+    return id ? { opts: { liveId: id }, label: id } : null;
+  } catch {
+    if (text.startsWith('@')) return asHandle(text);
+    if (/^UC[\w-]{22}$/.test(text)) return { opts: { channelId: text }, label: text };
+    if (/^[\w-]{11}$/.test(text)) return { opts: { liveId: text }, label: text };
+    return asHandle(text);
+  }
 }
 function clean(v, max = 500) { return String(v ?? '').trim().slice(0, max); }
 server.on('upgrade', (req, socket, head) => {
@@ -50,7 +64,7 @@ wss.on('connection', ws => {
     closeSession(ws);
     const session = { tiktok: null, youtube: null }; sessions.set(ws, session);
     const tt = clean(msg.tiktokUsername, 80).replace(/^@/, '').replace(/[^\w.]/g, '');
-    const yt = getYoutubeId(clean(msg.youtubeLive, 300));
+    const yt = getYoutubeTarget(clean(msg.youtubeLive, 300));
     const statuses = [];
     if (tt) {
       try {
@@ -65,12 +79,12 @@ wss.on('connection', ws => {
     } else statuses.push('TikTok belum diisi.');
     if (yt) {
       try {
-        const chat = new LiveChat({ liveId: yt }); session.youtube = chat;
+        const chat = new LiveChat(yt.opts); session.youtube = chat;
         chat.on('chat', item => emit(ws, { platform: 'YouTube', kind: 'comment', username: item.author?.name || item.authorName || 'viewer', text: Array.isArray(item.message) ? item.message.map(x => x.text || '').join('') : clean(item.message, 1000) }));
         chat.on('error', e => send(ws, { type: 'error', message: `YouTube: ${clean(e?.message || e, 300)}` }));
         const started = await chat.start();
-        if (started === false) throw new Error('Tidak bisa membaca live chat. Pastikan siaran sedang LIVE dan ID/URL benar.');
-        statuses.push(`YouTube live chat tersambung: ${yt}`);
+        if (started === false) throw new Error('Tidak bisa membaca live chat. Pastikan channel/siaran sedang LIVE dan username/URL benar.');
+        statuses.push(`YouTube live chat tersambung: ${yt.label}`);
       } catch (e) { try { session.youtube?.stop(); } catch {} session.youtube = null; send(ws, { type: 'error', message: `YouTube: ${clean(e?.message || e, 300)}` }); }
     } else if (clean(msg.youtubeLive)) statuses.push('YouTube: URL/ID live tidak valid.');
     else statuses.push('YouTube belum diisi.');
