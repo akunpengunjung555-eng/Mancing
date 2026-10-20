@@ -15,7 +15,6 @@ class_name = "GameRoom"
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
 
-# Buat dulu di Cloudflare: Storage & Databases > D1 > Create database "mancing-db", lalu tempel ID-nya
 [[d1_databases]]
 binding = "DB"
 database_name = "mancing-db"
