@@ -19,6 +19,8 @@ const safeEq = (a, b) => { if (a.length !== b.length) return false; let r = 0; f
 
 const SESSION_MS = 30 * 24 * 3600 * 1000;
 const USER_RE = /^[a-z0-9_.]{3,20}$/;
+const MUT_OK = new Set(['', 'neon', 'emas', 'kristal', 'pelangi']);
+const MAX_FRIENDS = 100, MAX_PENDING = 30, GIFTS_PER_DAY = 50, INBOX_MAX = 500;
 
 let ready = false;
 async function init(env) {
@@ -33,6 +35,13 @@ async function init(env) {
       created_at INTEGER NOT NULL)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS sessions(
       token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, expires INTEGER NOT NULL)`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS friends(
+      requester TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL, PRIMARY KEY(requester, target))`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS friends_target ON friends(target)'),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS gift_log(
+      sender TEXT NOT NULL, receiver TEXT NOT NULL, fish TEXT NOT NULL, at INTEGER NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS gift_log_sender ON gift_log(sender, at)'),
   ]);
   try { await env.DB.prepare("ALTER TABLE users ADD COLUMN inbox TEXT NOT NULL DEFAULT '[]'").run(); } catch { /* sudah ada */ }
   ready = true;
@@ -159,6 +168,7 @@ async function admin(env, req, u, path) {
     if (target.role === 'admin') return err(400, 'Akun admin tidak bisa dihapus.');
     await env.DB.batch([
       env.DB.prepare('DELETE FROM sessions WHERE username=?').bind(name),
+      env.DB.prepare('DELETE FROM friends WHERE requester=? OR target=?').bind(name, name),
       env.DB.prepare('DELETE FROM users WHERE username=?').bind(name),
     ]);
     return J({ ok: true });
@@ -166,10 +176,13 @@ async function admin(env, req, u, path) {
   return err(404, 'Not found');
 }
 
+// Kosongkan hanya item inbox yang sudah dibaca (n item pertama); item baru yang masuk di sela-sela tetap aman.
+const CLEAR_READ_INBOX = "COALESCE((SELECT json_group_array(json(value)) FROM json_each(users.inbox) WHERE key>=?),'[]')";
+
 async function fish(env, req, u, path) {
   if (path === '/fish/load') {
     const inbox = JSON.parse(u.inbox || '[]');
-    if (inbox.length) await env.DB.prepare("UPDATE users SET inbox='[]' WHERE username=?").bind(u.username).run();
+    if (inbox.length) await env.DB.prepare(`UPDATE users SET inbox=${CLEAR_READ_INBOX} WHERE username=?`).bind(inbox.length, u.username).run();
     return J({ ok: true, balance: u.balance, state: JSON.parse(u.state || '{}'), inbox });
   }
   if (path === '/fish/sync') {
@@ -192,11 +205,101 @@ async function fish(env, req, u, path) {
     const inbox = JSON.parse((fresh && fresh.inbox) || '[]');
     const newBal = (fresh ? fresh.balance : u.balance) + d; // termasuk koin kiriman admin yang masuk barusan
     if (newBal < 0) return err(400, 'Saldo tidak cukup.');
-    await env.DB.prepare("UPDATE users SET balance=?, state=?, win_start=?, win_amt=?, inbox='[]' WHERE username=?")
-      .bind(newBal, stateStr, winStart, winAmt, u.username).run();
+    await env.DB.prepare(`UPDATE users SET balance=?, state=?, win_start=?, win_amt=?, inbox=${CLEAR_READ_INBOX} WHERE username=?`)
+      .bind(newBal, stateStr, winStart, winAmt, inbox.length, u.username).run();
     return J({ ok: true, balance: newBal, capped, inbox });
   }
   return err(404, 'Not found');
+}
+
+// ---- Teman ----
+async function social(env, req, u, path) {
+  const me = u.username;
+  if (path === '/friends/list') {
+    const { results } = await env.DB.prepare('SELECT requester,target,status FROM friends WHERE requester=? OR target=?').bind(me, me).all();
+    const friends = [], incoming = [], outgoing = [];
+    for (const r of results) {
+      const other = r.requester === me ? r.target : r.requester;
+      if (r.status === 'accepted') friends.push(other);
+      else if (r.target === me) incoming.push(other);
+      else outgoing.push(other);
+    }
+    return J({ ok: true, friends: friends.sort(), incoming: incoming.sort(), outgoing: outgoing.sort() });
+  }
+  const b = await readJson(req), name = cleanName(b.username);
+  if (!USER_RE.test(name) || name === me) return err(400, 'Username tidak valid.');
+  const rel = (a, c) => env.DB.prepare('SELECT status FROM friends WHERE requester=? AND target=?').bind(a, c).first();
+  const countFriends = async who => (await env.DB.prepare("SELECT COUNT(*) c FROM friends WHERE status='accepted' AND (requester=? OR target=?)").bind(who, who).first()).c;
+
+  if (path === '/friends/add') {
+    if (!(await env.DB.prepare('SELECT 1 FROM users WHERE username=?').bind(name).first())) return err(404, 'Akun tidak ditemukan.');
+    const mine = await rel(me, name), theirs = await rel(name, me);
+    if ((mine && mine.status === 'accepted') || (theirs && theirs.status === 'accepted')) return err(409, 'Kalian sudah berteman.');
+    if (mine) return err(409, 'Permintaan sudah terkirim, tunggu dia menerima.');
+    if (await countFriends(me) >= MAX_FRIENDS) return err(400, 'Daftar temanmu penuh.');
+    if (theirs) { // dia sudah lebih dulu mengajak -> langsung berteman
+      if (await countFriends(name) >= MAX_FRIENDS) return err(400, 'Daftar teman dia penuh.');
+      await env.DB.prepare("UPDATE friends SET status='accepted' WHERE requester=? AND target=?").bind(name, me).run();
+      return J({ ok: true, status: 'friends' });
+    }
+    const pend = await env.DB.prepare("SELECT COUNT(*) c FROM friends WHERE requester=? AND status='pending'").bind(me).first();
+    if (pend.c >= MAX_PENDING) return err(429, 'Terlalu banyak permintaan menunggu.');
+    await env.DB.prepare("INSERT INTO friends(requester,target,status,created_at) VALUES(?,?, 'pending', ?)").bind(me, name, Date.now()).run();
+    return J({ ok: true, status: 'pending' });
+  }
+  if (path === '/friends/accept') {
+    const r = await rel(name, me);
+    if (!r || r.status !== 'pending') return err(404, 'Permintaan tidak ditemukan.');
+    if (await countFriends(me) >= MAX_FRIENDS) return err(400, 'Daftar temanmu penuh.');
+    if (await countFriends(name) >= MAX_FRIENDS) return err(400, 'Daftar teman dia penuh.');
+    await env.DB.prepare("UPDATE friends SET status='accepted' WHERE requester=? AND target=?").bind(name, me).run();
+    return J({ ok: true });
+  }
+  if (path === '/friends/decline') {
+    await env.DB.prepare("DELETE FROM friends WHERE requester=? AND target=? AND status='pending'").bind(name, me).run();
+    return J({ ok: true });
+  }
+  if (path === '/friends/remove') {
+    await env.DB.prepare("DELETE FROM friends WHERE status='accepted' AND ((requester=? AND target=?) OR (requester=? AND target=?))").bind(me, name, name, me).run();
+    return J({ ok: true });
+  }
+  return err(404, 'Not found');
+}
+
+// ---- Kirim ikan ke teman ----
+async function giftFish(env, req, u) {
+  const b = await readJson(req), me = u.username, to = cleanName(b.to);
+  const id = String(b.id ?? ''), w = Number(b.w), sh = b.sh ? 1 : 0, mut = String(b.mut ?? '');
+  if (!USER_RE.test(to) || to === me) return err(400, 'Penerima tidak valid.');
+  if (!/^[a-z0-9_]{1,40}$/.test(id) || !(w > 0 && w <= 1e6) || !MUT_OK.has(mut)) return err(400, 'Data ikan tidak valid.');
+  const fr = await env.DB.prepare("SELECT 1 FROM friends WHERE status='accepted' AND ((requester=? AND target=?) OR (requester=? AND target=?))").bind(me, to, to, me).first();
+  if (!fr) return err(403, 'Hanya bisa mengirim ke teman.');
+  const cnt = await env.DB.prepare('SELECT COUNT(*) c FROM gift_log WHERE sender=? AND at>?').bind(me, Date.now() - 86400000).first();
+  if (cnt.c >= GIFTS_PER_DAY) return err(429, 'Batas kirim ikan harian tercapai (' + GIFTS_PER_DAY + ' per 24 jam).');
+  const rcv = await env.DB.prepare('SELECT json_array_length(inbox) n FROM users WHERE username=?').bind(to).first();
+  if (!rcv) return err(404, 'Penerima tidak ditemukan.');
+  if (rcv.n >= INBOX_MAX) return err(409, 'Kotak masuk penerima penuh. Minta dia membuka game dulu.');
+
+  const row = await env.DB.prepare('SELECT state FROM users WHERE username=?').bind(me).first();
+  const oldState = (row && row.state) || '{}';
+  let st; try { st = JSON.parse(oldState); } catch { st = {}; }
+  const bag = Array.isArray(st.bag) ? st.bag : [];
+  const i = bag.findIndex(x => x && x.id === id && Math.abs(Number(x.w) - w) < 0.006 && (x.sh ? 1 : 0) === sh && String(x.mut || '') === mut);
+  if (i < 0) return err(409, 'Ikan itu tidak ada di tasmu. Tunggu sebentar lalu coba lagi.');
+  const [f] = bag.splice(i, 1);
+  const item = { t: 'fish', id, n: 1, w: Math.round(Number(f.w) * 100) / 100, sh, from: me };
+  if (mut) item.mut = mut;
+
+  // Dua langkah dalam satu transaksi; keduanya hanya jalan jika state pengirim belum berubah (cegah dobel kirim).
+  const res = await env.DB.batch([
+    env.DB.prepare("UPDATE users SET inbox=json_insert(inbox,'$[#]',json(?)) WHERE username=? AND EXISTS(SELECT 1 FROM users s WHERE s.username=? AND s.state=?)")
+      .bind(JSON.stringify(item), to, me, oldState),
+    env.DB.prepare('UPDATE users SET state=? WHERE username=? AND state=?').bind(JSON.stringify(st), me, oldState),
+  ]);
+  if (!res[0].meta.changes || !res[1].meta.changes) return err(409, 'Data berubah saat mengirim. Coba lagi.');
+  await env.DB.prepare('INSERT INTO gift_log(sender,receiver,fish,at) VALUES(?,?,?,?)').bind(me, to, id + (mut ? '+' + mut : ''), Date.now()).run();
+  if (Math.random() < 0.02) await env.DB.prepare('DELETE FROM gift_log WHERE at<?').bind(Date.now() - 7 * 86400000).run();
+  return J({ ok: true });
 }
 
 export default {
@@ -228,6 +331,8 @@ export default {
       }
       if (path.startsWith('/admin/')) return await admin(env, req, u, path);
       if (path.startsWith('/fish/') && req.method === 'POST') return await fish(env, req, u, path);
+      if (path.startsWith('/friends/') && req.method === 'POST') return await social(env, req, u, path);
+      if (path === '/gift/fish' && req.method === 'POST') return await giftFish(env, req, u);
       return err(404, 'Not found');
     } catch (e) {
       console.error(e);
