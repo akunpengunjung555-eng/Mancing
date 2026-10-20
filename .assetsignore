@@ -1,9 +1,8 @@
 worker.js
-wrangler.toml
 server.js
+wrangler.toml
+README.md
 .assetsignore
+assetsignore
 node_modules
-.wrangler
-*.zip
-package.json
-package-lock.json
+.git

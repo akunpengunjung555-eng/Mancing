@@ -5,10 +5,27 @@ import { LiveChat } from 'youtube-chat';
 
 const PORT = Number(process.env.PORT || 8788);
 const TOKEN = String(process.env.CONNECTOR_TOKEN || '').trim();
+// Login akun: kalau AUTH_URL diisi (alamat Worker, mis. https://mancing.xxx.workers.dev), hanya akun admin /
+// akun terdaftar yang bisa konek. Token yang dikirim game = token sesi login pemain.
+const AUTH_URL = String(process.env.AUTH_URL || '').trim().replace(/\/+$/, '');
+const authCache = new Map();
+async function verifyUser(token) {
+  if (!token) return false;
+  const hit = authCache.get(token);
+  if (hit && hit.exp > Date.now()) return hit.ok;
+  let ok = false;
+  try {
+    const r = await fetch(`${AUTH_URL}/api/auth/verify?feature=live`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(6000) });
+    ok = r.ok;
+  } catch { return false; }
+  if (authCache.size > 500) authCache.clear();
+  authCache.set(token, { ok, exp: Date.now() + 60000 });
+  return ok;
+}
 const server = http.createServer((req, res) => {
   if (req.url === '/health' || req.url === '/') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({ ok: true, service: 'mancing-live-connector', websocket: '/ws', tokenProtected: Boolean(TOKEN) }));
+    res.end(JSON.stringify({ ok: true, service: 'mancing-live-connector', websocket: '/ws', tokenProtected: Boolean(TOKEN), accountProtected: Boolean(AUTH_URL) }));
     return;
   }
   res.writeHead(404, { 'content-type': 'text/plain' }); res.end('Not found');
@@ -47,11 +64,13 @@ function getYoutubeTarget(input) {
   }
 }
 function clean(v, max = 500) { return String(v ?? '').trim().slice(0, max); }
-server.on('upgrade', (req, socket, head) => {
+server.on('upgrade', async (req, socket, head) => {
+  socket.on('error', () => {});
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { socket.destroy(); return; }
   if (url.pathname !== '/ws') { socket.write('HTTP/1.1 404 Not Found\r\n\r\n'); socket.destroy(); return; }
   const token = url.searchParams.get('token') || req.headers['x-connector-token'] || '';
-  if (TOKEN && token !== TOKEN) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
+  const allowed = AUTH_URL ? await verifyUser(String(token)) : (!TOKEN || token === TOKEN);
+  if (!allowed) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
   wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
 });
 wss.on('connection', ws => {

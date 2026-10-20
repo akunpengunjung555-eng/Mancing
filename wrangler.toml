@@ -5,7 +5,7 @@ compatibility_date = "2026-10-13"
 [assets]
 directory = "."
 binding = "ASSETS"
-run_worker_first = ["/ws", "/health"]
+run_worker_first = ["/ws", "/health", "/api/*"]
 
 [[durable_objects.bindings]]
 name = "GAME_ROOM"
@@ -14,3 +14,15 @@ class_name = "GameRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
+
+# Buat dulu di Cloudflare: Storage & Databases > D1 > Create database "mancing-db", lalu tempel ID-nya
+[[d1_databases]]
+binding = "DB"
+database_name = "mancing-db"
+database_id = "ISI_DATABASE_ID_DARI_CLOUDFLARE"
+
+[vars]
+ALLOW_REGISTER = "1"
+START_COINS = "1000000000"
+MAX_GAIN_PER_MIN = "200000000000"
+CONNECTOR_URL = ""

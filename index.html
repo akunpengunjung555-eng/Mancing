@@ -6,7 +6,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script>if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}</script>
-</head><body>
+</head><body class="nofeat">
 <style>
 /* Layout: kanvas 3D penuh layar, HUD kaca di atas, tombol aksi bulat di bawah, sheet naik dari bawah */
 :root{
@@ -413,7 +413,7 @@ function loadInto(o){o=o||{};const n=Object.assign(defState(),o);n.upg=Object.as
 Object.defineProperty(S,'bait',{get(){return S.baits[S.baitSel]||0;},set(v){S.baits[S.baitSel]=Math.max(0,v);}});
 function post(m){}
 const pendingApi={};let apiN=0;
-function api(path,body){return new Promise(res=>{const id=++apiN;pendingApi[id]=res;post({t:'fish-api',id,path,body});setTimeout(()=>{if(pendingApi[id]){delete pendingApi[id];res({ok:false,status:0,j:{error:'Server tidak merespons'}});}},15000);});}
+function api(path,body){const t=(window.AUTH&&window.AUTH.token)||'';return fetch('/api'+path,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+t},body:JSON.stringify(body||{}),signal:AbortSignal.timeout(15000)}).then(async r=>{let j={};try{j=await r.json();}catch(e){}if(r.status===401&&window.AUTH&&window.AUTH.expired)window.AUTH.expired();return{ok:r.ok,status:r.status,j};}).catch(()=>({ok:false,status:0,j:{error:'Server tidak merespons'}}));}
 let base=0,pend=0,syncing=false,syncT=null,evq=null;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function stateOut(){const o=Object.assign({},S);delete o.coins;return o;}
@@ -2527,13 +2527,14 @@ const _uw=updateWorld;updateWorld=function(t,dt){apTick(dt);_uw(t,dt);};
 let wl=null;async function lock(){try{if(navigator.wakeLock)wl=await navigator.wakeLock.request('screen');}catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&LV.on)lock();});
 function goLive(auto){
+  if(auto&&!(window.AUTH&&window.AUTH.features&&window.AUTH.features.auto))return;
   AP.on=auto;LV.on=true;LV.t0=Date.now();LV.lastEnd=Date.now();$('apOn').checked=auto;lock();
   $('startBtn').click();say('start',{},2);say('react',{},2);
 }
 $('startAuto').addEventListener('click',()=>goLive(true));
 $('startBtn').addEventListener('click',()=>{if(!LV.on){LV.on=true;LV.t0=Date.now();}});
 $('bLive').addEventListener('click',()=>{$('livePanel').hidden=!$('livePanel').hidden;});
-$('apOn').addEventListener('change',e=>{AP.on=e.target.checked;if(AP.on){if(!LV.on){LV.on=true;LV.t0=Date.now();LV.lastEnd=Date.now();}lock();say('start',{},2);say('react',{},2);}});
+$('apOn').addEventListener('change',e=>{if(!(window.AUTH&&window.AUTH.features&&window.AUTH.features.auto)){e.target.checked=false;AP.on=false;return;}AP.on=e.target.checked;if(AP.on){if(!LV.on){LV.on=true;LV.t0=Date.now();LV.lastEnd=Date.now();}lock();say('start',{},2);say('react',{},2);}});
 $('apTts').addEventListener('change',e=>{SP.tts=e.target.checked;if(!SP.tts&&window.speechSynthesis)speechSynthesis.cancel();});
 $('apTest').addEventListener('click',()=>{
   if(!window.speechSynthesis){vs('Browser ini tidak mendukung suara. Pakai Chrome.');return;}
@@ -2545,7 +2546,7 @@ $('apVol').addEventListener('input',e=>{SP.vol=+e.target.value;});
 $('apAv').addEventListener('change',e=>avShow(e.target.checked));
 $('apClean').addEventListener('change',e=>{$('app').classList.toggle('clean',e.target.checked);});
 $('apReset').addEventListener('click',()=>{LV.t0=Date.now();LV.hr=0;LV.rc=0;LV.c=LV.e=LV.l=0;LV.bw=0;LV.bn='-';});
-window.addEventListener('keydown',e=>{if(e.key==='l'||e.key==='L')$('livePanel').hidden=!$('livePanel').hidden;});
+window.addEventListener('keydown',e=>{if((e.key==='l'||e.key==='L')&&window.AUTH&&window.AUTH.features&&window.AUTH.features.live)$('livePanel').hidden=!$('livePanel').hidden;});
 
 /* ===== TAMBAHAN v2: lokasi/latar acak, pilihan suara, avatar 3D, naskah VO, rekam ===== */
 (function(){
@@ -2787,7 +2788,7 @@ async function startUp(m){
   $('boot').classList.add('off');
   post({t:'fish-loaded'});
 }
-setTimeout(()=>startUp({server:false,inf:false,balance:1000000000,acc:'standalone'}),400);
+window.__startGame=startUp;window.__flushGame=flushAll;
 // Bridge LIVE events to the actual fishing controls in this game scope.
 let liveActionAt=0;
 window.mancingLiveState=()=>({ready:!!MODE.ready,started:!!G.started,ui:!!G.ui,state:G.state,ap:!!(document.getElementById('apOn')||{}).checked});
@@ -3353,4 +3354,114 @@ window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();d=e
 b.addEventListener('click',function(){if(!d)return;d.prompt();d.userChoice.then(function(){d=null;b.hidden=true;});});
 window.addEventListener('appinstalled',function(){b.hidden=true;});
 if(window.matchMedia('(display-mode: standalone)').matches)b.hidden=true;})();</script>
+<style id="authCss">
+body.nofeat #bLive,body.nofeat #livePanel,body.nofeat #lcFab,body.nofeat #lcPanel,body.nofeat #lcCard,body.nofeat #lcBan,body.nofeat #startAuto,body.nofeat #penyiar{display:none!important}
+#lcTokenWrap,label[for=lcToken],#lcToken{display:none!important}
+#authOv,#admOv{position:fixed;inset:0;z-index:1000000;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(circle at 50% 30%,#0b4a5e,#04202e 80%);color:#e3faf5;font-family:var(--font-body,system-ui);-webkit-user-select:text;user-select:text;touch-action:manipulation;overflow:auto}
+#authOv[hidden],#admOv[hidden]{display:none!important}
+.aBox{width:min(380px,100%);display:grid;gap:10px;padding:22px;border-radius:20px;background:rgba(3,23,34,.88);border:1px solid rgba(227,250,245,.16)}
+.aBox h1{margin:0;font-family:var(--font-display,system-ui);font-weight:400;font-size:34px;line-height:1;text-align:center}.aBox h1 em{font-style:normal;color:#ffc93c}
+.aBox p{margin:0;color:#8fb3bd;font-size:13px;text-align:center}
+.aTabs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.aTabs button,.aBox .aGo,.aSm{padding:11px 12px;border-radius:12px;font-weight:800;font-size:15px;background:#0d3a4c;color:#e3faf5;border:1px solid rgba(227,250,245,.16);cursor:pointer}
+.aTabs button.on{background:#17a8ad;color:#031722}
+.aBox .aGo{background:#ffc93c;color:#031722;font-size:17px;border:0}
+.aBox input{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #347081;background:#102f40;color:#fff;font:inherit;font-size:16px}
+.aErr{min-height:18px;color:#ff8a7a;font-size:13px;text-align:center}
+.aSm{padding:6px 10px;font-size:12px;border-radius:8px}
+#acct{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:14px;color:#8fb3bd}#acct b{color:#ffc93c}
+#admOv{align-items:flex-start}.admBox{width:min(640px,100%);display:grid;gap:10px;padding:18px;border-radius:20px;background:rgba(3,23,34,.95);border:1px solid rgba(227,250,245,.16);margin:auto}
+.admBox h2{margin:0;font-size:20px}.admRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid #153b4d;font-size:13px}.admRow .n{flex:1;min-width:110px;font-weight:800;word-break:break-all}
+.admRow small{color:#8fb3bd}.admNew{display:grid;grid-template-columns:1fr 1fr auto;gap:6px}.admNew input{padding:9px;font-size:14px}
+</style>
+<div id="authOv" hidden><div class="aBox">
+<h1>Mancing<br><em>Laut Dalam</em></h1><p>Masuk untuk menyimpan koin &amp; data pemainmu.</p>
+<div class="aTabs"><button type="button" id="aTabIn" class="on">Masuk</button><button type="button" id="aTabUp">Daftar</button></div>
+<input id="aUser" placeholder="Username" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="20">
+<input id="aPass" type="password" placeholder="Password" autocomplete="current-password" maxlength="64">
+<div class="aErr" id="aErr"></div>
+<button type="button" class="aGo" id="aGo">Masuk</button>
+</div></div>
+<div id="admOv" hidden><div class="admBox">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2>Panel Admin</h2><button type="button" class="aSm" id="admClose">Tutup</button></div>
+<small style="color:#8fb3bd">Akun yang dibuat/diaktifkan di sini bisa memakai Mancing Otomatis &amp; Live Streaming. Akun lain tidak melihat tombolnya.</small>
+<div class="admNew"><input id="nUser" placeholder="username baru" autocapitalize="off" maxlength="20"><input id="nPass" placeholder="password (min 6)" maxlength="64"><button type="button" class="aSm" id="nAdd">Tambah</button></div>
+<div class="aErr" id="admErr"></div><div id="admList"></div>
+</div></div>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const TK='mld-token';
+const LSg=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
+const LSs=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
+const A=window.AUTH={token:'',user:null,features:{live:false,auto:false},expired(){LSs(TK,'');alert('Sesi berakhir. Silakan masuk lagi.');location.reload();}};
+const stop=e=>e.stopPropagation();
+['keydown','keyup','keypress','pointerdown'].forEach(t=>{$('authOv').addEventListener(t,stop);$('admOv').addEventListener(t,stop)});
+async function call(path,body,method){
+  const r=await fetch('/api'+path,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+A.token},body:JSON.stringify(body||{})});
+  let j={};try{j=await r.json()}catch(e){}return{ok:r.ok,status:r.status,j};
+}
+let mode='in';
+function setMode(m){mode=m;$('aTabIn').classList.toggle('on',m==='in');$('aTabUp').classList.toggle('on',m==='up');$('aGo').textContent=m==='in'?'Masuk':'Buat Akun';$('aPass').autocomplete=m==='in'?'current-password':'new-password';$('aErr').textContent='';}
+$('aTabIn').onclick=()=>setMode('in');$('aTabUp').onclick=()=>setMode('up');
+async function submit(){
+  const username=$('aUser').value.trim(),password=$('aPass').value;
+  if(!username||!password){$('aErr').textContent='Isi username dan password.';return}
+  $('aGo').disabled=true;$('aErr').textContent='';
+  try{
+    const r=await call(mode==='in'?'/auth/login':'/auth/register',{username,password});
+    if(r.ok&&r.j.ok){LSs(TK,r.j.token);enter(r.j.token,r.j.user)}else $('aErr').textContent=r.j.error||'Gagal, coba lagi.';
+  }catch(e){$('aErr').textContent='Tidak bisa menghubungi server.'}
+  $('aGo').disabled=false;
+}
+$('aGo').onclick=submit;$('aPass').addEventListener('keydown',e=>{if(e.key==='Enter')submit()});
+function enter(token,user){
+  A.token=token;A.user=user;A.features=user.features||{};
+  $('authOv').hidden=true;
+  document.body.classList.toggle('nofeat',!(A.features.live||A.features.auto));
+  const tk=$('lcToken');if(tk){tk.value=token;}
+  if(user.connectorUrl&&$('lcUrl')){$('lcUrl').value=user.connectorUrl;}
+  const st=$('start');
+  if(st&&!$('acct')){
+    const d=document.createElement('div');d.id='acct';
+    const s=document.createElement('span');s.append('Masuk sebagai ');const b=document.createElement('b');b.textContent=user.username+(user.role==='admin'?' (admin)':'');s.append(b);d.append(s);
+    if(user.role==='admin'){const x=document.createElement('button');x.className='aSm';x.textContent='Panel Admin';x.onclick=openAdmin;d.append(x)}
+    const o=document.createElement('button');o.className='aSm';o.textContent='Keluar';o.onclick=logout;d.append(o);
+    st.append(d);
+  }
+  window.__startGame({server:true,acc:user.username});
+}
+async function logout(){
+  try{if(window.__flushGame)await window.__flushGame()}catch(e){}
+  try{await call('/auth/logout',{})}catch(e){}
+  LSs(TK,'');location.reload();
+}
+/* panel admin */
+const fmt=n=>Number(n).toLocaleString('id-ID');
+async function loadAdmin(){
+  const r=await call('/admin/list',null,'GET');const box=$('admList');box.textContent='';
+  if(!(r.ok&&r.j.ok)){$('admErr').textContent=r.j.error||'Gagal memuat.';return}
+  r.j.users.forEach(u=>{
+    const row=document.createElement('div');row.className='admRow';
+    const n=document.createElement('div');n.className='n';n.textContent=u.username;const sm=document.createElement('small');sm.textContent=' '+(u.role==='admin'?'admin':u.premium?'terdaftar':'biasa')+' · '+fmt(u.balance)+' koin';n.append(sm);row.append(n);
+    if(u.role!=='admin'){
+      const mk=(t,fn)=>{const b=document.createElement('button');b.className='aSm';b.textContent=t;b.onclick=fn;row.append(b)};
+      mk(u.premium?'Cabut fitur':'Beri fitur',async()=>{await call('/admin/premium',{username:u.username,premium:!u.premium});loadAdmin()});
+      mk('Reset PW',async()=>{const p=prompt('Password baru untuk '+u.username+' (min 6):');if(!p)return;const x=await call('/admin/password',{username:u.username,password:p});$('admErr').textContent=x.ok?'Password diganti.':(x.j.error||'Gagal');});
+      mk('Hapus',async()=>{if(!confirm('Hapus akun '+u.username+' beserta datanya?'))return;await call('/admin/delete',{username:u.username});loadAdmin()});
+    }
+    box.append(row);
+  });
+}
+function openAdmin(){$('admOv').hidden=false;$('admErr').textContent='';loadAdmin()}
+$('admClose').onclick=()=>{$('admOv').hidden=true};
+$('nAdd').onclick=async()=>{const r=await call('/admin/create',{username:$('nUser').value,password:$('nPass').value,premium:true});$('admErr').textContent=r.ok?'Akun dibuat.':(r.j.error||'Gagal');if(r.ok){$('nUser').value='';$('nPass').value='';loadAdmin()}};
+/* mulai */
+(async()=>{
+  const t=LSg(TK);
+  if(t){A.token=t;try{const r=await call('/auth/me',null,'GET');if(r.ok&&r.j.ok){enter(t,r.j.user);return}}catch(e){}}
+  A.token='';$('authOv').hidden=false;
+})();
+})();
+</script>
 </body></html>
