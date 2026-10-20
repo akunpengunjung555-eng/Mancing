@@ -19,7 +19,7 @@ new_sqlite_classes = ["GameRoom"]
 [[d1_databases]]
 binding = "DB"
 database_name = "mancing-db"
-database_id = "ISI_DATABASE_ID_DARI_CLOUDFLARE"
+database_id = "ff13c36f-3d5c-494c-9552-2bb68c8b91b9"
 
 [vars]
 ALLOW_REGISTER = "1"
