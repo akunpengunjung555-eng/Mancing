@@ -1,5 +1,5 @@
 # Mancing — Cloudflare game + LIVE connector
-
+ 
 This bundle contains the game and the separately hosted Node.js connector. Cloudflare project name stays `mancing`.
 
 ## Contents
