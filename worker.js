@@ -34,6 +34,7 @@ async function init(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS sessions(
       token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, expires INTEGER NOT NULL)`),
   ]);
+  try { await env.DB.prepare("ALTER TABLE users ADD COLUMN inbox TEXT NOT NULL DEFAULT '[]'").run(); } catch { /* sudah ada */ }
   ready = true;
 }
 
@@ -108,6 +109,27 @@ async function admin(env, req, u, path) {
     return J({ ok: true, users: results });
   }
   const b = await readJson(req), name = cleanName(b.username);
+  if (path === '/admin/detail') {
+    const t = await env.DB.prepare('SELECT username,role,premium,balance,state FROM users WHERE username=?').bind(name).first();
+    if (!t) return err(404, 'Akun tidak ditemukan.');
+    return J({ ok: true, user: { username: t.username, role: t.role, premium: !!t.premium, balance: t.balance }, state: JSON.parse(t.state || '{}') });
+  }
+  if (path === '/admin/give') {
+    const t = await env.DB.prepare('SELECT username,balance,inbox FROM users WHERE username=?').bind(name).first();
+    if (!t) return err(404, 'Akun tidak ditemukan.');
+    const ID = /^[a-z0-9_]{1,40}$/, items = [];
+    const coins = Math.trunc(Number(b.coins) || 0);
+    if (coins < 0 || coins > 1e15) return err(400, 'Jumlah koin tidak valid.');
+    for (const id of (Array.isArray(b.rods) ? b.rods : []).slice(0, 100)) if (ID.test(String(id))) items.push({ t: 'rod', id: String(id) });
+    for (const [id, n] of Object.entries(b.baits && typeof b.baits === 'object' ? b.baits : {}).slice(0, 100))
+      if (ID.test(id) && Number(n) >= 1) items.push({ t: 'bait', id, n: Math.min(9999, Math.trunc(Number(n))) });
+    for (const f of (Array.isArray(b.fish) ? b.fish : []).slice(0, 200))
+      if (f && ID.test(String(f.id)) && Number(f.n) >= 1) items.push({ t: 'fish', id: String(f.id), n: Math.min(999, Math.trunc(Number(f.n))), sh: f.sh ? 1 : 0 });
+    if (!coins && !items.length) return err(400, 'Tidak ada yang dikirim.');
+    const inbox = JSON.parse(t.inbox || '[]').concat(items).slice(-500);
+    await env.DB.prepare('UPDATE users SET balance=balance+?, inbox=? WHERE username=?').bind(coins, JSON.stringify(inbox), name).run();
+    return J({ ok: true, sent: items.length, coins });
+  }
   if (path === '/admin/create') {
     const password = String(b.password ?? '');
     if (!USER_RE.test(name)) return err(400, 'Username 3-20 karakter: huruf kecil, angka, titik, garis bawah.');
@@ -145,16 +167,20 @@ async function admin(env, req, u, path) {
 }
 
 async function fish(env, req, u, path) {
-  if (path === '/fish/load') return J({ ok: true, balance: u.balance, state: JSON.parse(u.state || '{}') });
+  if (path === '/fish/load') {
+    const inbox = JSON.parse(u.inbox || '[]');
+    if (inbox.length) await env.DB.prepare("UPDATE users SET inbox='[]' WHERE username=?").bind(u.username).run();
+    return J({ ok: true, balance: u.balance, state: JSON.parse(u.state || '{}'), inbox });
+  }
   if (path === '/fish/sync') {
     const b = await readJson(req);
     let d = Math.trunc(Number(b.d) || 0), capped = false;
     if (!Number.isFinite(d)) return err(400, 'Data tidak valid.');
     const stateStr = JSON.stringify(b.state && typeof b.state === 'object' ? b.state : {});
-    if (stateStr.length > 60000) return err(413, 'Data terlalu besar.');
+    if (stateStr.length > 150000) return err(413, 'Data terlalu besar.');
     let winStart = u.win_start, winAmt = u.win_amt;
     if (d > 0 && u.role !== 'admin') {
-      const now = Date.now(), maxMin = Number(env.MAX_GAIN_PER_MIN) || 2e11;
+      const now = Date.now(), maxMin = Number(env.MAX_GAIN_PER_MIN) || 2e12;
       if (now - winStart > 60000) { winStart = now; winAmt = 0; }
       const allowed = Math.max(0, maxMin - winAmt);
       if (d > allowed) { d = allowed; capped = true; }
@@ -162,9 +188,13 @@ async function fish(env, req, u, path) {
     }
     const balance = u.balance + d;
     if (balance < 0) return err(400, 'Saldo tidak cukup.');
-    await env.DB.prepare('UPDATE users SET balance=?, state=?, win_start=?, win_amt=? WHERE username=?')
-      .bind(balance, stateStr, winStart, winAmt, u.username).run();
-    return J({ ok: true, balance, capped });
+    const fresh = await env.DB.prepare('SELECT balance, inbox FROM users WHERE username=?').bind(u.username).first();
+    const inbox = JSON.parse((fresh && fresh.inbox) || '[]');
+    const newBal = (fresh ? fresh.balance : u.balance) + d; // termasuk koin kiriman admin yang masuk barusan
+    if (newBal < 0) return err(400, 'Saldo tidak cukup.');
+    await env.DB.prepare("UPDATE users SET balance=?, state=?, win_start=?, win_amt=?, inbox='[]' WHERE username=?")
+      .bind(newBal, stateStr, winStart, winAmt, u.username).run();
+    return J({ ok: true, balance: newBal, capped, inbox });
   }
   return err(404, 'Not found');
 }
