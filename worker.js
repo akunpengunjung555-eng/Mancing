@@ -135,6 +135,8 @@ async function admin(env, req, u, path) {
     for (const f of (Array.isArray(b.fish) ? b.fish : []).slice(0, 200))
       if (f && ID.test(String(f.id)) && Number(f.n) >= 1) items.push({ t: 'fish', id: String(f.id), n: Math.min(999, Math.trunc(Number(f.n))), sh: f.sh ? 1 : 0 });
     if (!coins && !items.length) return err(400, 'Tidak ada yang dikirim.');
+    const at = Date.now();
+    for (const it of items) it.at = at;
     const inbox = JSON.parse(t.inbox || '[]').concat(items).slice(-500);
     await env.DB.prepare('UPDATE users SET balance=balance+?, inbox=? WHERE username=?').bind(coins, JSON.stringify(inbox), name).run();
     return J({ ok: true, sent: items.length, coins });
@@ -287,7 +289,7 @@ async function giftFish(env, req, u) {
   const i = bag.findIndex(x => x && x.id === id && Math.abs(Number(x.w) - w) < 0.006 && (x.sh ? 1 : 0) === sh && String(x.mut || '') === mut);
   if (i < 0) return err(409, 'Ikan itu tidak ada di tasmu. Tunggu sebentar lalu coba lagi.');
   const [f] = bag.splice(i, 1);
-  const item = { t: 'fish', id, n: 1, w: Math.round(Number(f.w) * 100) / 100, sh, from: me };
+  const item = { t: 'fish', id, n: 1, w: Math.round(Number(f.w) * 100) / 100, sh, from: me, at: Date.now() }; // 'at' = jam kirim asli, dipakai Riwayat di game
   if (mut) item.mut = mut;
 
   // Dua langkah dalam satu transaksi; keduanya hanya jalan jika state pengirim belum berubah (cegah dobel kirim).
