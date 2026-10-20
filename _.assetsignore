@@ -1,5 +1,0 @@
-.assetsignore
-wrangler.toml
-worker.js
-server.js
-README.md
