@@ -543,18 +543,18 @@ const V3=THREE.Vector3;
 const canvas=$('gl'),app=$('app');
 /* ===== Pengaturan grafik: preset kualitas + mode otomatis (turun sendiri kalau lag) ===== */
 const GFX_LV={
- min:{aa:false,pr:.5,fps:30,water:4,amb:0,fx:.15,glow:false,rays:false,decor:0,lantern:false,rodAnim:3,ambAnim:3},
- low:{aa:false,pr:.75,fps:30,water:3,amb:5,fx:.35,glow:false,rays:false,decor:.35,lantern:false,rodAnim:2,ambAnim:3},
- med:{aa:true,pr:1,fps:45,water:2,amb:12,fx:.7,glow:true,rays:true,decor:.8,lantern:true,rodAnim:1,ambAnim:2},
- high:{aa:true,pr:1.75,fps:60,water:1,amb:20,fx:1,glow:true,rays:true,decor:1,lantern:true,rodAnim:1,ambAnim:1}
+ min:{aa:false,pr:1.5,fps:30,water:4,amb:0,fx:.15,glow:false,rays:false,decor:0,lantern:false,rodAnim:3,ambAnim:3,cheap:true},
+ low:{aa:false,pr:1.75,fps:30,water:3,amb:5,fx:.35,glow:false,rays:false,decor:.35,lantern:false,rodAnim:2,ambAnim:3,cheap:true},
+ med:{aa:true,pr:2,fps:45,water:2,amb:12,fx:.7,glow:true,rays:true,decor:.8,lantern:true,rodAnim:1,ambAnim:2,cheap:false},
+ high:{aa:true,pr:2,fps:60,water:1,amb:20,fx:1,glow:true,rays:true,decor:1,lantern:true,rodAnim:1,ambAnim:1,cheap:false}
 };
 const GFX_ORDER=['min','low','med','high'];
 const GFX_NAME={auto:'Otomatis',min:'Terendah',low:'Rendah',med:'Sedang',high:'Tinggi'};
 const GFX_DESC={
- min:'Untuk HP kentang. Resolusi rendah, 30 fps, tanpa ikan latar, karang, efek cahaya, dan hampir tanpa partikel.',
- low:'Ringan. Resolusi sedang-rendah, 30 fps, sedikit ikan latar, tanpa efek cahaya berkilau.',
- med:'Seimbang. Resolusi normal, hingga 45 fps, efek cahaya dan partikel dikurangi.',
- high:'Terbaik. Resolusi penuh, 60 fps, semua efek dan ikan latar menyala.'
+ min:'Untuk HP kentang. Gambar tetap tajam; 30 fps, air disederhanakan, tanpa ikan latar, karang, cahaya, dan hampir tanpa partikel.',
+ low:'Ringan. Gambar tajam, 30 fps, air disederhanakan, sedikit ikan latar, tanpa efek cahaya berkilau.',
+ med:'Seimbang. Gambar tajam, hingga 45 fps, efek cahaya dan partikel dikurangi.',
+ high:'Terbaik. Gambar tajam, 60 fps, semua efek dan ikan latar menyala.'
 };
 const gfxLS={get(k){try{return localStorage.getItem(k);}catch(e){return null;}},set(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
 function gfxGuess(){const c=navigator.hardwareConcurrency||4,m=navigator.deviceMemory||4;if(m<=2||c<=2)return'min';if(m<=3||c<=4)return'low';if(c>=8&&m>=6)return'high';return'med';}
@@ -570,6 +570,7 @@ function applyGfx(){
   shafts.forEach(m=>{m.visible=GF.rays;});
   amb.forEach((a,i)=>{a.m.visible=i<GF.amb;});
   lantern.intensity=GF.lantern?.9:0;
+  water.material=GF.cheap?waterLite:waterFull;
   gfxPass(rod);gfxPass(bobHold);
   $('fpsBox').hidden=!GF.showFps;
 }
@@ -629,6 +630,7 @@ const wpos=wgeo.attributes.position,wcount=wpos.count,wbx=new Float32Array(wcoun
 for(let i=0;i<wcount;i++){wbx[i]=wpos.getX(i);wbz[i]=wpos.getZ(i);}
 const water=new THREE.Mesh(wgeo,new THREE.MeshPhongMaterial({color:0x1798a8,emissive:0x053642,specular:0xffd6a0,shininess:70,transparent:true,opacity:.78,flatShading:true,depthWrite:false}));
 water.renderOrder=1;scene.add(water);
+const waterFull=water.material,waterLite=new THREE.MeshLambertMaterial({color:0x1fa6b4,emissive:0x0a4a5a,transparent:true,opacity:.8,flatShading:true,depthWrite:false});
 const ripples=[];
 function addRipple(x,z,amp){ripples.push({x,z,t:0,amp:amp||.3});if(ripples.length>5)ripples.shift();}
 let wAcc=0;
@@ -2357,7 +2359,7 @@ function loadV(){try{SP.voices=speechSynthesis.getVoices().filter(v=>/^(id|in)/i
 if(window.speechSynthesis){loadV();speechSynthesis.onvoiceschanged=loadV;setInterval(()=>{try{if(speechSynthesis.speaking)speechSynthesis.resume();}catch(e){}},8000);}
 const fl=(t,v)=>t.replace(/\{(\w+)\}/g,(m,k)=>v&&v[k]!=null?v[k]:'');
 function say(ev,v,pri){
-  if(!LV.on)return;pri=pri||1;const a=LN[ev];if(!a)return;
+  if(!LV.on||!(window.AUTH&&window.AUTH.features&&window.AUTH.features.live))return;pri=pri||1;const a=LN[ev];if(!a)return;
   if(SP.busy&&pri<2&&SP.q.length>=1)return;
   let t,n=0;do{t=pick(a);n++;}while(RECENT.includes(t)&&n<8);RECENT.push(t);if(RECENT.length>70)RECENT.shift();
   let ci;do{ci=(Math.random()*CMT.length)|0;}while(ci===SP.last);
@@ -2751,7 +2753,7 @@ q('vcXl','change',e=>{CFG.xl=e.target.checked?1:0;sv();});q('avFollow','change',
 q('vcPre','change',e=>{const p=PRE[e.target.value];CFG.vp=p[0];CFG.vr=p[1];$('vcP').value=p[0];$('vcR').value=p[1];sv();});
 q('vcP','input',e=>{CFG.vp=+e.target.value;sv();});q('vcR','input',e=>{CFG.vr=+e.target.value;sv();});
 q('avType','change',e=>setAv(e.target.value));
-function speakItems(a){if(!LV.on){toast('Mulai LIVE / Mulai Manual dulu');return;}avShow(true);a.forEach(x=>SP.q.push(x));if(!SP.busy)nextSp();}
+function speakItems(a){if(!(window.AUTH&&window.AUTH.features&&window.AUTH.features.live))return;if(!LV.on){toast('Mulai LIVE / Mulai Manual dulu');return;}avShow(true);a.forEach(x=>SP.q.push(x));if(!SP.busy)nextSp();}
 q('voGo','click',()=>{const t=$('voTxt').value.trim();if(!t)return;const p=CMT[+$('voWho').value]||CMT[0];
   speakItems((t.match(/[^.!?\n]+[.!?]?/g)||[t]).map(s=>s.trim()).filter(Boolean).map(s=>({p,t:s,pri:2})));});
 q('vcTestAll','click',()=>speakItems(CMT.map(p=>({p,t:'Halo, saya '+p[0]+'. '+p[5],pri:2}))));
@@ -3355,7 +3357,7 @@ b.addEventListener('click',function(){if(!d)return;d.prompt();d.userChoice.then(
 window.addEventListener('appinstalled',function(){b.hidden=true;});
 if(window.matchMedia('(display-mode: standalone)').matches)b.hidden=true;})();</script>
 <style id="authCss">
-body.nofeat #bLive,body.nofeat #livePanel,body.nofeat #lcFab,body.nofeat #lcPanel,body.nofeat #lcCard,body.nofeat #lcBan,body.nofeat #startAuto,body.nofeat #penyiar{display:none!important}
+body.nofeat #lcHint,body.nofeat #lfxCv,body.nofeat #lfxBig,body.nofeat #lfxFlash,body.nofeat #lfxToasts,body.nofeat #bLive,body.nofeat #livePanel,body.nofeat #lcFab,body.nofeat #lcPanel,body.nofeat #lcCard,body.nofeat #lcBan,body.nofeat #startAuto,body.nofeat #penyiar{display:none!important}
 #lcTokenWrap,label[for=lcToken],#lcToken{display:none!important}
 #authOv,#admOv{position:fixed;inset:0;z-index:1000000;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(circle at 50% 30%,#0b4a5e,#04202e 80%);color:#e3faf5;font-family:var(--font-body,system-ui);-webkit-user-select:text;user-select:text;touch-action:manipulation;overflow:auto}
 #authOv[hidden],#admOv[hidden]{display:none!important}
