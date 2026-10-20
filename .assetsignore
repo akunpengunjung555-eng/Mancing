@@ -6,3 +6,4 @@ README.md
 assetsignore
 node_modules
 .git
+.wrangler
