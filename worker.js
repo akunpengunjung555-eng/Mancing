@@ -337,16 +337,27 @@ export default {
       const u = await authUser(env, req);
       if (!u) return err(401, 'Sesi berakhir. Silakan masuk lagi.');
       if (path === '/auth/me') return J({ ok: true, user: publicUser(u, env) });
-      if (path === '/turn') { // kredensial TURN Cloudflare untuk suara mic; kunci tetap di server
-        if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) return J({ ok: true, iceServers: null });
-        if (!turnCache.ice || Date.now() - turnCache.at > 6 * 3600 * 1000) {
-          const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + encodeURIComponent(env.TURN_KEY_ID) + '/credentials/generate-ice-servers', {
-            method: 'POST', headers: { authorization: 'Bearer ' + env.TURN_API_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }),
-          });
-          if (!r.ok) return J({ ok: true, iceServers: null });
-          const d = await r.json().catch(() => null);
-          if (!d || !Array.isArray(d.iceServers)) return J({ ok: true, iceServers: null });
-          turnCache = { at: Date.now(), ice: d.iceServers };
+      if (path === '/turn') { // kredensial TURN untuk suara mic; kunci tetap di server (prioritas: Metered, lalu Cloudflare)
+        const useMetered = env.METERED_APP && env.METERED_API_KEY;
+        if (!useMetered && (!env.TURN_KEY_ID || !env.TURN_API_TOKEN)) return J({ ok: true, iceServers: null });
+        if (!turnCache.ice || Date.now() - turnCache.at > (useMetered ? 3600 * 1000 : 6 * 3600 * 1000)) {
+          let ice = null;
+          if (useMetered) {
+            // METERED_APP = nama app saja, contoh "mancing" (untuk mancing.metered.live)
+            const r = await fetch('https://' + encodeURIComponent(env.METERED_APP) + '.metered.live/api/v1/turn/credentials?apiKey=' + encodeURIComponent(env.METERED_API_KEY));
+            if (!r.ok) return J({ ok: true, iceServers: null });
+            const d = await r.json().catch(() => null);
+            ice = Array.isArray(d) ? d : null;
+          } else {
+            const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + encodeURIComponent(env.TURN_KEY_ID) + '/credentials/generate-ice-servers', {
+              method: 'POST', headers: { authorization: 'Bearer ' + env.TURN_API_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }),
+            });
+            if (!r.ok) return J({ ok: true, iceServers: null });
+            const d = await r.json().catch(() => null);
+            ice = d && Array.isArray(d.iceServers) ? d.iceServers : null;
+          }
+          if (!ice || !ice.length) return J({ ok: true, iceServers: null });
+          turnCache = { at: Date.now(), ice };
         }
         return J({ ok: true, iceServers: turnCache.ice });
       }
