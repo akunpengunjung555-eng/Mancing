@@ -466,7 +466,7 @@ export class GameRoom {
       let q; try { q = JSON.parse(ev.data); } catch { return; }
       const n = (v, a, b) => Math.max(a, Math.min(b, Math.round((Number(v) || 0) * 1000) / 1000));
       const s = cap(q.s, 12).toLowerCase();
-      const v = { s: /^[a-z]{1,12}$/.test(s) ? s : 'idle', x: n(q.x, -1, 1), d: n(q.d, 0, 1), fi: n(q.fi, 0, 1), zo: n(q.zo, 0, 1), sz: n(q.sz, 0, 1), pr: n(q.pr, 0, 1), te: n(q.te, 0, 1), pw: n(q.pw, 0, 1), p: q.p ? 1 : 0, fn: cap(q.fn, 40), fr: RAR_OK.has(q.fr) || q.fr === 'common' ? q.fr : '' };
+      const v = { s: /^[a-z]{1,12}$/.test(s) ? s : 'idle', x: n(q.x, -1, 1), d: n(q.d, 0, 1), fi: n(q.fi, 0, 1), zo: n(q.zo, 0, 1), sz: n(q.sz, 0, 1), pr: n(q.pr, 0, 1), te: n(q.te, 0, 1), pw: n(q.pw, 0, 1), p: q.p ? 1 : 0, fn: cap(q.fn, 40), fr: RAR_OK.has(q.fr) || q.fr === 'common' ? q.fr : '', fk: /^[a-z0-9_]{1,32}$/.test(String(q.fk || '')) ? q.fk : '' };
       this.toRoom(r, { type: 'view', u: p.user, v }, ws);
       return;
     }
