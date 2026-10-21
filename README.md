@@ -1,4 +1,4 @@
-# Mancing — Cloudflare game + LIVE connector 
+# Mancing — Cloudflare game + LIVE connector
  
 This bundle contains the game and the separately hosted Node.js connector. Cloudflare project name stays `mancing`.
 
@@ -21,7 +21,8 @@ With Auto mode enabled, incoming comments/gifts/likes call the game's real fishi
 ## Mabar & Kabar Global (baru)
 Tombol 👥 di kanan atas (sebelah 📡) membuka panel. Butuh login; tidak perlu akun premium. Semua lewat `/ws` di Worker `mancing` (Durable Object `GameRoom`, tidak perlu migrasi/binding baru).
 - **Kabar global**: saat pemain mana pun dapat ikan **Epik** atau **Legendaris**, semua pemain online melihat banner di atas layar (+ bunyi lonceng, bisa dimatikan di panel). Legendaris lebih lama & bercahaya emas.
-- **Mabar**: buat room (kode 4 karakter) atau gabung dengan kode, maks 4 pemain. Anggota melihat status satu sama lain (Siap / STRIKE! / Melawan ikan), tangkapan Langka+ di feed room, emote cepat, dan **poin tim** (Langka 1, Epik 3, Legendaris 10, Berkilau x2). Teman yang sudah accepted bisa diundang langsung dari panel.
+- **Mabar + split-screen**: layar otomatis terbagi sesuai jumlah pemain (2 pemain → 2 layar, 3-4 → 4 layar, 5-6 → 6 layar). Layar pertama = game aslimu; layar lain menampilkan pancingan teman realtime (lempar, nunggu, STRIKE, bar melawan ikan, ikan terangkat) dari status ~8x/detik lewat `/ws`. Bisa dimatikan di panel 👥.
+- **Mabar**: buat room (kode 4 karakter) atau gabung dengan kode, maks 6 pemain. Anggota melihat status satu sama lain (Siap / STRIKE! / Melawan ikan), tangkapan Langka+ di feed room, emote cepat, dan **poin tim** (Langka 1, Epik 3, Legendaris 10, Berkilau x2). Teman yang sudah accepted bisa diundang langsung dari panel.
 - Poin tim hanya skor; tidak mengubah koin/ekonomi game.
 - Anti-spam di server: 1 laporan ikan per 6 detik per pemain, maks 40 pengumuman global per menit, 8 pesan/detik per koneksi, satu koneksi per akun.
 

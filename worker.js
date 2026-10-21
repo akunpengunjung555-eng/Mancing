@@ -360,7 +360,7 @@ export default {
 // --- Realtime: notif global ikan epik/legendaris + room mabar (satu Durable Object untuk semua pemain) ---
 const RAR_OK = new Set(['rare', 'epic', 'legend']);
 const RAR_PTS = { rare: 1, epic: 3, legend: 10 };
-const ROOM_MAX = 4;
+const ROOM_MAX = 6;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_RE = /^[A-Z2-9]{4}$/;
 const EMOTES = new Set(['👍', '🔥', '😂', '😱', '🎣', '👑', '🐟', '❤️']);
@@ -458,8 +458,19 @@ export class GameRoom {
   async onMessage(ws, ev) {
     const p = this.peers.get(ws); if (!p) return;
     if (typeof ev.data !== 'string' || ev.data.length > 1500) return;
-    // batas laju pesan per koneksi: 20 pesan burst, isi ulang 8/detik
     const now = Date.now();
+    // 'view' = status pancingan realtime untuk split-screen mabar; batas laju sendiri (maks ~11/detik), tidak memakan jatah pesan lain
+    if (ev.data.length < 420 && ev.data.startsWith('{"type":"view"')) {
+      if (now - (p.vAt || 0) < 85) return; p.vAt = now;
+      const r = p.room && this.rooms.get(p.room); if (!r || r.members.size < 2) return;
+      let q; try { q = JSON.parse(ev.data); } catch { return; }
+      const n = (v, a, b) => Math.max(a, Math.min(b, Math.round((Number(v) || 0) * 1000) / 1000));
+      const s = cap(q.s, 12).toLowerCase();
+      const v = { s: /^[a-z]{1,12}$/.test(s) ? s : 'idle', x: n(q.x, -1, 1), d: n(q.d, 0, 1), fi: n(q.fi, 0, 1), zo: n(q.zo, 0, 1), sz: n(q.sz, 0, 1), pr: n(q.pr, 0, 1), te: n(q.te, 0, 1), pw: n(q.pw, 0, 1), p: q.p ? 1 : 0, fn: cap(q.fn, 40), fr: RAR_OK.has(q.fr) || q.fr === 'common' ? q.fr : '' };
+      this.toRoom(r, { type: 'view', u: p.user, v }, ws);
+      return;
+    }
+    // batas laju pesan per koneksi: 20 pesan burst, isi ulang 8/detik
     p.tokens = Math.min(20, p.tokens + (now - p.tAt) / 125); p.tAt = now;
     if (p.tokens < 1) return; p.tokens -= 1;
     let m; try { m = JSON.parse(ev.data); } catch { return; }
