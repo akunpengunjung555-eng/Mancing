@@ -310,8 +310,22 @@ export default {
     if (url.pathname === '/health') return Response.json({ ok: true, service: 'mancing' });
     if (url.pathname === '/ws') {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('WebSocket upgrade required', { status: 426 });
+      // Hanya pemain login (token sesi) yang boleh masuk; username diambil dari D1, bukan dari klien.
+      const token = (url.searchParams.get('token') || '').trim();
+      let username = '';
+      if (token) {
+        try {
+          await init(env);
+          const row = await env.DB.prepare('SELECT u.username FROM sessions s JOIN users u ON u.username=s.username WHERE s.token_hash=? AND s.expires>?')
+            .bind(await sha256(token), Date.now()).first();
+          username = row ? row.username : '';
+        } catch (e) { console.error(e); }
+      }
+      if (!username) return new Response('Unauthorized', { status: 401 });
+      const headers = new Headers(req.headers);
+      headers.set('x-mancing-user', username); // header ini selalu ditimpa di sini, nilai dari klien dibuang
       const id = env.GAME_ROOM.idFromName('global-live-room');
-      return env.GAME_ROOM.get(id).fetch(req);
+      return env.GAME_ROOM.get(id).fetch(new Request(url.origin + '/ws', { headers }));
     }
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     const path = url.pathname.slice(4);
@@ -343,58 +357,163 @@ export default {
   },
 };
 
-// --- Room lama (dipertahankan apa adanya supaya deploy tidak error) ---
-const PRICE = Object.freeze({ karang: 10, tuna: 250, hiu: 1500, leviathan: 10000 });
-const FISH = Object.freeze({
-  karang: { name: 'Ikan Karang', rarity: 'biasa', emoji: '🐟' },
-  tuna: { name: 'Tuna Raksasa', rarity: 'besar', emoji: '🐠' },
-  hiu: { name: 'Hiu Legendaris', rarity: 'legendaris', emoji: '🦈' },
-  leviathan: { name: 'Leviathan Mitos', rarity: 'boss', emoji: '🐉' }
-});
+// --- Realtime: notif global ikan epik/legendaris + room mabar (satu Durable Object untuk semua pemain) ---
+const RAR_OK = new Set(['rare', 'epic', 'legend']);
+const RAR_PTS = { rare: 1, epic: 3, legend: 10 };
+const ROOM_MAX = 4;
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const CODE_RE = /^[A-Z2-9]{4}$/;
+const EMOTES = new Set(['👍', '🔥', '😂', '😱', '🎣', '👑', '🐟', '❤️']);
+const cap = (v, n) => String(v ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, n);
+
 export class GameRoom {
-  constructor(ctx) { this.ctx = ctx; this.sockets = new Map(); }
+  constructor(ctx, env) {
+    this.ctx = ctx; this.env = env;
+    this.peers = new Map();   // ws -> { user, room, st, tokens, tAt, lastCatch }
+    this.rooms = new Map();   // code -> { code, host, members:Set<ws>, score:{pts,catches,epic,legend} }
+    this.globalWin = { at: 0, n: 0 };
+  }
+  send(ws, obj) { try { ws.send(JSON.stringify(obj)); } catch { this.drop(ws); } }
+  broadcast(obj, except) {
+    const wire = JSON.stringify(obj);
+    for (const ws of this.peers.keys()) { if (ws === except) continue; try { ws.send(wire); } catch { this.drop(ws); } }
+  }
+  online() { return this.peers.size; }
+  drop(ws) {
+    if (!this.peers.has(ws)) return;
+    this.leaveRoom(ws, true);
+    this.peers.delete(ws);
+    this.broadcast({ type: 'online', n: this.online() });
+  }
+  roomView(r) {
+    return {
+      code: r.code, host: r.host, score: r.score,
+      members: [...r.members].map(w => { const p = this.peers.get(w); return { u: p.user, st: p.st, last: p.lastCatch || null }; }),
+    };
+  }
+  pushRoom(r) { const v = { type: 'room', room: this.roomView(r) }; for (const w of r.members) this.send(w, v); }
+  toRoom(r, obj, except) { for (const w of r.members) if (w !== except) this.send(w, obj); }
+  newCode() {
+    for (let t = 0; t < 50; t++) {
+      const b = crypto.getRandomValues(new Uint8Array(4));
+      const c = [...b].map(x => CODE_CHARS[x % CODE_CHARS.length]).join('');
+      if (!this.rooms.has(c)) return c;
+    }
+    return '';
+  }
+  joinRoom(ws, code, resume) {
+    const p = this.peers.get(ws);
+    code = String(code || '').toUpperCase().trim();
+    if (!CODE_RE.test(code)) return this.send(ws, { type: 'error', message: 'Kode room harus 4 huruf/angka.' });
+    if (p.room === code) return this.pushRoom(this.rooms.get(code));
+    let r = this.rooms.get(code);
+    if (!r) {
+      if (!resume) return this.send(ws, { type: 'error', message: 'Room ' + code + ' tidak ditemukan.' });
+      r = { code, host: p.user, members: new Set(), score: { pts: 0, catches: 0, epic: 0, legend: 0 } }; // sambung ulang setelah server restart
+      this.rooms.set(code, r);
+    }
+    if (r.members.size >= ROOM_MAX) return this.send(ws, { type: 'error', message: 'Room penuh (maks ' + ROOM_MAX + ' pemain).' });
+    this.leaveRoom(ws, false);
+    r.members.add(ws); p.room = code;
+    this.toRoom(r, { type: 'room_event', kind: 'join', user: p.user }, ws);
+    this.pushRoom(r);
+  }
+  createRoom(ws) {
+    const code = this.newCode();
+    if (!code) return this.send(ws, { type: 'error', message: 'Gagal membuat room, coba lagi.' });
+    const p = this.peers.get(ws);
+    this.leaveRoom(ws, false);
+    const r = { code, host: p.user, members: new Set([ws]), score: { pts: 0, catches: 0, epic: 0, legend: 0 } };
+    this.rooms.set(code, r); p.room = code;
+    this.pushRoom(r);
+  }
+  leaveRoom(ws, silent) {
+    const p = this.peers.get(ws);
+    if (!p || !p.room) return;
+    const r = this.rooms.get(p.room); p.room = '';
+    if (!r) return;
+    r.members.delete(ws);
+    if (!silent) this.send(ws, { type: 'room', room: null });
+    if (!r.members.size) { this.rooms.delete(r.code); return; }
+    if (r.host === p.user) r.host = this.peers.get([...r.members][0]).user;
+    this.toRoom(r, { type: 'room_event', kind: 'leave', user: p.user });
+    this.pushRoom(r);
+  }
   async fetch(request) {
+    const user = request.headers.get('x-mancing-user') || '';
+    if (!user) return new Response('Unauthorized', { status: 401 });
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
-    this.sockets.set(server, { viewerId: '', viewerName: 'Penonton' });
-    server.addEventListener('close', () => this.sockets.delete(server));
-    server.addEventListener('error', () => this.sockets.delete(server));
-    server.addEventListener('message', async event => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'identify') {
-          const viewerId = String(msg.viewerId || '').slice(0, 80);
-          if (!viewerId) return server.send(JSON.stringify({ type: 'error', message: 'viewerId diperlukan' }));
-          const viewerName = String(msg.viewerName || 'Penonton').slice(0, 32) || 'Penonton';
-          this.sockets.set(server, { viewerId, viewerName });
-          const balance = await this.ctx.storage.get(`wallet:${viewerId}`) ?? 1000;
-          server.send(JSON.stringify({ type: 'wallet', balance }));
-          return;
-        }
-        if (msg.type !== 'purchase' || !PRICE[msg.fishId]) return;
-        const identity = this.sockets.get(server) || {};
-        const viewerId = identity.viewerId;
-        if (!viewerId || String(msg.viewerId || '') !== viewerId) return server.send(JSON.stringify({ type: 'error', message: 'Identitas penonton belum terverifikasi di sesi ini' }));
-        const viewerName = identity.viewerName || 'Penonton';
-        const cost = PRICE[msg.fishId];
-        const result = await this.ctx.storage.transaction(async tx => {
-          const key = `wallet:${viewerId}`;
-          const balance = await tx.get(key) ?? 1000;
-          if (balance < cost) return { ok: false, balance };
-          const next = balance - cost;
-          await tx.put(key, next);
-          return { ok: true, balance: next };
-        });
-        if (!result.ok) return server.send(JSON.stringify({ type: 'purchase_result', ok: false, message: 'Koin tidak cukup', balance: result.balance }));
-        server.send(JSON.stringify({ type: 'purchase_result', ok: true, balance: result.balance }));
-        const eventOut = { type: 'global_catch', viewerId, viewerName, fishId: msg.fishId, fish: FISH[msg.fishId], cost, at: Date.now() };
-        const wire = JSON.stringify(eventOut);
-        for (const ws of this.sockets.keys()) { try { ws.send(wire); } catch { this.sockets.delete(ws); } }
-      } catch {
-        try { server.send(JSON.stringify({ type: 'error', message: 'Pesan tidak valid' })); } catch {}
-      }
-    });
+    // satu koneksi per akun: tab lama ditutup
+    for (const [w, p] of this.peers) if (p.user === user) { try { w.close(4000, 'replaced'); } catch {} this.drop(w); }
+    this.peers.set(server, { user, room: '', st: 'lobi', tokens: 20, tAt: Date.now(), lastCatch: null, lastGlobal: 0 });
+    this.send(server, { type: 'hello', user, online: this.online() });
+    this.broadcast({ type: 'online', n: this.online() }, server);
+    server.addEventListener('close', () => this.drop(server));
+    server.addEventListener('error', () => this.drop(server));
+    server.addEventListener('message', ev => { this.onMessage(server, ev).catch(e => console.error(e)); });
     return new Response(null, { status: 101, webSocket: client });
+  }
+  async onMessage(ws, ev) {
+    const p = this.peers.get(ws); if (!p) return;
+    if (typeof ev.data !== 'string' || ev.data.length > 1500) return;
+    // batas laju pesan per koneksi: 20 pesan burst, isi ulang 8/detik
+    const now = Date.now();
+    p.tokens = Math.min(20, p.tokens + (now - p.tAt) / 125); p.tAt = now;
+    if (p.tokens < 1) return; p.tokens -= 1;
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    switch (m.type) {
+      case 'ping': return this.send(ws, { type: 'pong' });
+      case 'room_create': return this.createRoom(ws);
+      case 'room_join': return this.joinRoom(ws, m.code, !!m.resume);
+      case 'room_leave': return this.leaveRoom(ws, false);
+      case 'status': {
+        const st = cap(m.st, 12).toLowerCase();
+        if (!/^[a-z]{1,12}$/.test(st) || st === p.st) return;
+        p.st = st;
+        const r = p.room && this.rooms.get(p.room);
+        if (r) this.toRoom(r, { type: 'room_status', user: p.user, st });
+        return;
+      }
+      case 'emote': {
+        const r = p.room && this.rooms.get(p.room);
+        if (r && EMOTES.has(m.e) && now - (p.lastEmote || 0) > 1200) { p.lastEmote = now; this.toRoom(r, { type: 'room_event', kind: 'emote', user: p.user, e: m.e }); }
+        return;
+      }
+      case 'invite': {
+        const to = cap(m.to, 20).toLowerCase(), r = p.room && this.rooms.get(p.room);
+        if (!r) return this.send(ws, { type: 'error', message: 'Buat atau masuk room dulu.' });
+        if (!USER_RE.test(to) || to === p.user) return this.send(ws, { type: 'error', message: 'Username tidak valid.' });
+        const fr = await this.env.DB.prepare("SELECT 1 FROM friends WHERE status='accepted' AND ((requester=? AND target=?) OR (requester=? AND target=?))").bind(p.user, to, to, p.user).first();
+        if (!fr) return this.send(ws, { type: 'error', message: 'Hanya bisa mengundang teman.' });
+        const target = [...this.peers].find(([, q]) => q.user === to);
+        if (!target) return this.send(ws, { type: 'error', message: '@' + to + ' sedang tidak online.' });
+        this.send(target[0], { type: 'invite', from: p.user, code: r.code });
+        return this.send(ws, { type: 'notice', message: 'Undangan terkirim ke @' + to });
+      }
+      case 'catch': {
+        const rar = String(m.rar || '');
+        if (!RAR_OK.has(rar)) return;
+        if (now - p.lastGlobal < 6000) return; // satu pemain tidak mungkin dapat ikan langka tiap <6 dtk
+        p.lastGlobal = now;
+        const fish = { id: cap(m.id, 40), name: cap(m.name, 48) || 'Ikan misterius', rar, w: Math.max(0, Math.min(1e6, Number(m.w) || 0)), shiny: m.shiny ? 1 : 0, mut: cap(m.mut, 12) };
+        p.lastCatch = { name: fish.name, rar };
+        const r = p.room && this.rooms.get(p.room);
+        if (r) {
+          const pts = RAR_PTS[rar] * (fish.shiny ? 2 : 1);
+          r.score.pts += pts; r.score.catches++; if (rar === 'epic') r.score.epic++; if (rar === 'legend') r.score.legend++;
+          this.toRoom(r, { type: 'room_event', kind: 'catch', user: p.user, fish, pts });
+          this.pushRoom(r);
+        }
+        if (rar === 'epic' || rar === 'legend') {
+          // pagar global: maks 40 pengumuman per menit untuk seluruh server
+          if (now - this.globalWin.at > 60000) this.globalWin = { at: now, n: 0 };
+          if (this.globalWin.n++ >= 40) return;
+          this.broadcast({ type: 'global_catch', user: p.user, fish, at: now });
+        }
+        return;
+      }
+    }
   }
 }

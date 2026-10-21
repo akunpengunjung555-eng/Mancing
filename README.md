@@ -18,7 +18,17 @@ This bundle contains the game and the separately hosted Node.js connector. Cloud
 ## Game actions
 With Auto mode enabled, incoming comments/gifts/likes call the game's real fishing controls: cast when idle, hook on bite, and reel during fight for selected 5/7/10 seconds. Cooldown limits repeated events. When game is waiting for a bite or a UI sheet is open, actions are skipped. Manual mode remains default.
 
+## Mabar & Kabar Global (baru)
+Tombol 👥 di kanan atas (sebelah 📡) membuka panel. Butuh login; tidak perlu akun premium. Semua lewat `/ws` di Worker `mancing` (Durable Object `GameRoom`, tidak perlu migrasi/binding baru).
+- **Kabar global**: saat pemain mana pun dapat ikan **Epik** atau **Legendaris**, semua pemain online melihat banner di atas layar (+ bunyi lonceng, bisa dimatikan di panel). Legendaris lebih lama & bercahaya emas.
+- **Mabar**: buat room (kode 4 karakter) atau gabung dengan kode, maks 4 pemain. Anggota melihat status satu sama lain (Siap / STRIKE! / Melawan ikan), tangkapan Langka+ di feed room, emote cepat, dan **poin tim** (Langka 1, Epik 3, Legendaris 10, Berkilau x2). Teman yang sudah accepted bisa diundang langsung dari panel.
+- Poin tim hanya skor; tidak mengubah koin/ekonomi game.
+- Anti-spam di server: 1 laporan ikan per 6 detik per pemain, maks 40 pengumuman global per menit, 8 pesan/detik per koneksi, satu koneksi per akun.
+
 ## Honest status / limits
 - Node connector code and game bridge are included; it is not possible to confirm your account's real LIVE connection from this environment. Test with actual active streams and check the in-game event log.
 - TikTok uses a community Node.js connector; protocol/account access can change. YouTube reads the specified active video's live chat.
 - Cloudflare Worker serves the game but is not used to run the persistent Node.js connector. The connector needs its own Node-compatible host.
+- Kabar global & poin tim berdasarkan laporan dari game (klien), sama seperti sistem koin lain di game ini; server hanya membatasi laju dan memvalidasi bentuk data. Pemain yang memodifikasi klien bisa memalsukan pengumuman.
+- Room disimpan di memori Durable Object. Jika Cloudflare merestart DO, room hilang; klien otomatis menyambung ulang dan membuat room dengan kode yang sama.
+- Fitur mabar/kabar global belum diuji dengan banyak pemain sungguhan di Cloudflare dari sini. Logika room diuji dengan tes lokal, tampilan dengan WebSocket tiruan.

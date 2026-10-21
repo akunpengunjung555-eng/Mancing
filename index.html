@@ -4603,4 +4603,252 @@ if(t.id==='bLive'&&!L.hidden)C.hidden=true;else if(t.id==='lcFab'&&!C.hidden)L.h
 @keyframes gfxFlash{from{opacity:.75}to{opacity:0}}
 @media (prefers-reduced-motion:reduce){#gfx::before{animation:none}}
 </style>
+<!-- ===== MABAR + NOTIF GLOBAL (ikan Epik & Legendaris) ===== -->
+<style>
+#mpFab{position:fixed;z-index:999998;right:102px;top:58px;width:38px;height:34px;border-radius:999px;padding:0;border:1px solid #2b8495;background:rgba(3,23,34,.8);display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(6px);font-size:18px;line-height:1;-webkit-tap-highlight-color:transparent}
+#mpFab[hidden]{display:none}
+#mpFab i{position:absolute;right:0;top:0;width:11px;height:11px;border-radius:50%;background:#7b8a93;border:2px solid #031722;pointer-events:none}
+#mpFab[data-s=ok] i{background:#3ddc84}#mpFab[data-s=wait] i{background:#ffc93c}
+#mpFab b{position:absolute;left:-2px;bottom:-4px;min-width:16px;height:16px;border-radius:8px;padding:0 4px;box-sizing:border-box;background:#ffc93c;color:#031722;font:800 10px/16px system-ui,sans-serif;text-align:center}
+body:has(#app.clean) #mpFab{opacity:.12}
+@media (max-width:480px){#mpFab{right:100px;top:54px}}
+#mpPanel{position:fixed;z-index:999999;right:12px;top:100px;width:min(320px,calc(100vw - 24px));max-height:calc(100dvh - 120px);overflow:auto;box-sizing:border-box;background:#071d2b;color:#e9fbff;border:1px solid #2b8495;border-radius:14px;padding:12px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.55)}
+#mpPanel[hidden],#mpInv[hidden]{display:none}
+#mpPanel .h{display:flex;justify-content:space-between;align-items:center;font-size:15px;margin-bottom:6px}
+#mpPanel .h button{background:none;border:0;color:#9fd3dc;font-size:22px;line-height:1;cursor:pointer}
+#mpPanel h4{margin:12px 0 5px;font-size:12px;letter-spacing:.08em;color:#7fe3e6;text-transform:uppercase}
+#mpPanel .st{padding:6px 9px;border-radius:9px;background:#0c2a3a;color:#bfe6ee;font-size:12px}
+#mpPanel label.c{display:flex;gap:8px;align-items:center;margin:4px 0;cursor:pointer}
+#mpPanel input[type=text]{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid #2b8495;background:#04141d;color:#fff;font:600 14px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.12em}
+#mpPanel input.nm{text-transform:none;letter-spacing:0}
+#mpPanel .row{display:flex;gap:6px;margin-top:6px}
+#mpPanel button.b{flex:1;min-height:36px;border-radius:9px;border:1px solid #2b8495;background:#0f3a4d;color:#e9fbff;font:700 13px system-ui,sans-serif;cursor:pointer}
+#mpPanel button.b.pri{background:#ffc93c;border-color:#ffc93c;color:#2a1a00}
+#mpPanel button.b:disabled{opacity:.45;cursor:default}
+#mpPanel .code{font:800 30px/1 ui-monospace,monospace;letter-spacing:.3em;text-align:center;padding:8px 0 8px .3em;border-radius:10px;background:#04141d;border:1px dashed #ffc93c;color:#ffc93c;cursor:pointer}
+#mpPanel .mem{display:flex;align-items:center;gap:8px;padding:6px 8px;margin-top:4px;border-radius:9px;background:#0c2a3a}
+#mpPanel .mem .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+#mpPanel .mem .s{font-size:11px;color:#9fd3dc;white-space:nowrap}
+#mpPanel .mem .s.hot{color:#ffc93c;font-weight:800}
+#mpPanel .score{display:flex;justify-content:space-between;margin-top:8px;padding:7px 10px;border-radius:9px;background:linear-gradient(90deg,#3a2a00,#0c2a3a);font-weight:700}
+#mpPanel .emo{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+#mpPanel .emo button{flex:1;min-width:32px;height:34px;border-radius:9px;border:1px solid #2b8495;background:#0c2a3a;font-size:17px;cursor:pointer}
+#mpPanel .log{max-height:120px;overflow:auto;margin-top:4px;padding:6px 8px;border-radius:9px;background:#04141d;font-size:12px;color:#bfe6ee;white-space:pre-wrap}
+#mpPanel small{display:block;margin-top:6px;color:#7ea8b2}
+#mpBan{position:fixed;z-index:999996;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);transform:translate(-50%,-130%);width:min(94vw,440px);box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:18px;background:rgba(6,16,30,.94);border:2px solid var(--bc,#c77bff);box-shadow:0 0 24px var(--bc,#c77bff),inset 0 0 18px rgba(255,255,255,.06);color:#fff;font:700 15px/1.25 system-ui,sans-serif;pointer-events:none;opacity:0;transition:transform .45s cubic-bezier(.2,1.3,.4,1),opacity .3s}
+#mpBan.show{transform:translate(-50%,0);opacity:1}
+#mpBan.legend{background:linear-gradient(100deg,rgba(60,38,0,.96),rgba(30,6,40,.96));animation:mpGlow 1s ease-in-out infinite alternate}
+#mpBan .ic{font-size:34px;line-height:1;flex:none}
+#mpBan small{display:block;font-size:11px;font-weight:800;letter-spacing:.16em;color:var(--bc,#c77bff);margin-bottom:2px}
+#mpBan span b{color:var(--bc,#c77bff)}
+@keyframes mpGlow{from{box-shadow:0 0 18px var(--bc)}to{box-shadow:0 0 42px var(--bc),0 0 80px rgba(255,201,60,.35)}}
+#mpInv{position:fixed;z-index:999997;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translateX(-50%);width:min(92vw,340px);box-sizing:border-box;padding:12px 14px;border-radius:14px;background:#071d2b;border:2px solid #ffc93c;color:#fff;font:600 14px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+#mpInv .row{display:flex;gap:8px;margin-top:8px}
+#mpInv button{flex:1;min-height:36px;border-radius:9px;border:1px solid #2b8495;background:#0f3a4d;color:#fff;font:700 13px system-ui,sans-serif;cursor:pointer}
+#mpInv button.y{background:#ffc93c;color:#2a1a00;border-color:#ffc93c}
+#mpEmo{position:fixed;z-index:999996;left:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 150px);display:flex;flex-direction:column;gap:4px;pointer-events:none}
+#mpEmo div{padding:4px 10px;border-radius:99px;background:rgba(3,23,34,.85);border:1px solid #2b8495;color:#fff;font:700 13px system-ui,sans-serif;animation:mpE 3s ease-out forwards}
+@keyframes mpE{0%{opacity:0;transform:translateY(8px)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){#mpBan.legend{animation:none}#mpBan{transition:opacity .3s}}
+</style>
+<button id="mpFab" type="button" aria-label="Mabar &amp; notif global" title="Mabar &amp; notif global" data-s="off" hidden>👥<i></i><b hidden></b></button>
+<div id="mpBan" aria-live="polite"></div>
+<div id="mpEmo"></div>
+<div id="mpInv" hidden><div id="mpInvT"></div><div class="row"><button type="button" id="mpInvNo">Tolak</button><button type="button" class="y" id="mpInvYes">Gabung</button></div></div>
+<div id="mpPanel" hidden>
+  <div class="h"><b>👥 Mabar &amp; Kabar Global</b><button id="mpClose" type="button" aria-label="Tutup">×</button></div>
+  <div class="st" id="mpStatus">Menunggu login…</div>
+
+  <h4>🔔 Kabar global</h4>
+  <label class="c"><input id="mpGOn" type="checkbox" checked> Tampilkan saat pemain lain dapat ikan Epik / Legendaris</label>
+  <label class="c"><input id="mpGSnd" type="checkbox" checked> Bunyi lonceng</label>
+  <div class="row"><button class="b" id="mpTest" type="button">🧪 Tes notif</button></div>
+  <div class="log" id="mpHist">Belum ada kabar.</div>
+
+  <h4>🎮 Mabar</h4>
+  <div id="mpOut">
+    <div class="row"><button class="b pri" id="mpCreate" type="button">➕ Buat room</button></div>
+    <div class="row"><input id="mpCodeIn" type="text" maxlength="4" placeholder="KODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="b" id="mpJoin" type="button" style="flex:0 0 90px">Gabung</button></div>
+    <small>Maks 4 pemain per room. Semua anggota melihat status &amp; tangkapan langka satu sama lain, dan poin tim naik bersama (Langka 1, Epik 3, Legendaris 10, Berkilau ×2).</small>
+  </div>
+  <div id="mpIn" hidden>
+    <div class="code" id="mpCode" title="Ketuk untuk menyalin">----</div>
+    <small style="text-align:center">Ketuk kode untuk menyalin &amp; bagikan ke teman</small>
+    <div id="mpMem"></div>
+    <div class="score"><span>🏆 Poin tim</span><span id="mpScore">0</span></div>
+    <small id="mpScoreD"></small>
+    <div class="emo" id="mpEmoBar"></div>
+    <div class="row"><input id="mpInvIn" class="nm" type="text" maxlength="20" placeholder="username teman" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="b" id="mpInvBtn" type="button" style="flex:0 0 90px">Undang</button></div>
+    <div class="log" id="mpFeed">Belum ada aktivitas.</div>
+    <div class="row"><button class="b" id="mpLeave" type="button">🚪 Keluar room</button></div>
+  </div>
+</div>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id);
+const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const fab=$('mpFab'),panel=$('mpPanel');
+const T={
+  epic:{ic:'🔮',label:'EPIK',c:'#c77bff',ms:5200,notes:[659,784,988]},
+  legend:{ic:'👑',label:'LEGENDARIS',c:'#ffc93c',ms:8000,notes:[523,659,784,1047,1319]},
+  rare:{ic:'💎',label:'LANGKA',c:'#4fb3ff',ms:0,notes:[]}
+};
+const ST={lobi:'Di lobi',idle:'Siap',charging:'Melempar…',casting:'Melempar…',waiting:'Menunggu ikan',bite:'STRIKE!',fight:'Melawan ikan',retract:'Menarik kail',landing:'Mengangkat ikan',reveal:'Melihat hasil'};
+const stLabel=s=>ST[s]||'Memancing';
+const S={ws:null,me:'',tok:'',room:null,online:0,retry:0,timer:null,want:true,lastSt:'',invT:null,hist:[],feed:[],queue:[],showing:false};
+const setText=(el,t)=>{el.textContent=t};
+const fmtW=w=>w>=100?Math.round(w)+' kg':(Math.round(w*10)/10)+' kg';
+
+/* ---------- pengaturan ---------- */
+const gOn=$('mpGOn'),gSnd=$('mpGSnd');
+if(LS.get('mpGOn')==='0')gOn.checked=false;if(LS.get('mpGSnd')==='0')gSnd.checked=false;
+gOn.addEventListener('change',()=>LS.set('mpGOn',gOn.checked?'1':'0'));
+gSnd.addEventListener('change',()=>LS.set('mpGSnd',gSnd.checked?'1':'0'));
+
+/* ketikan di panel tidak boleh memicu tombol game (Spasi = lempar) */
+['keydown','keyup','keypress','pointerdown'].forEach(t=>{[panel,fab,$('mpInv')].forEach(e=>e.addEventListener(t,ev=>ev.stopPropagation()))});
+
+/* ---------- bunyi ---------- */
+let ac=null;
+function chime(kind){
+  if(!gSnd.checked)return;const n=(T[kind]||{}).notes||[];if(!n.length)return;
+  try{
+    ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();
+    const t0=ac.currentTime+.02;
+    n.forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.type=kind==='legend'?'triangle':'sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0,t0+i*.11);g.gain.linearRampToValueAtTime(.16,t0+i*.11+.02);g.gain.exponentialRampToValueAtTime(.0008,t0+i*.11+.55);
+      o.connect(g).connect(ac.destination);o.start(t0+i*.11);o.stop(t0+i*.11+.6)});
+  }catch(e){}
+}
+
+/* ---------- banner kabar global (antre, satu per satu) ---------- */
+const ban=$('mpBan');
+function showNext(){
+  if(S.showing)return;const it=S.queue.shift();if(!it){return}
+  S.showing=true;const t=T[it.fish.rar]||T.epic;
+  ban.className=it.fish.rar==='legend'?'legend':'';ban.style.setProperty('--bc',t.c);ban.textContent='';
+  const ic=document.createElement('div');ic.className='ic';ic.textContent=t.ic;
+  const box=document.createElement('div'),sm=document.createElement('small');
+  sm.textContent='KABAR GLOBAL · '+t.label+(it.fish.shiny?' · BERKILAU':'');
+  const sp=document.createElement('span'),who=document.createElement('b');
+  who.textContent=it.self?'Kamu':'@'+it.user;
+  sp.append(who,' dapat ',document.createTextNode(it.fish.name+(it.fish.w?' ('+fmtW(it.fish.w)+')':'')+'!'));
+  box.append(sm,sp);ban.append(ic,box);
+  void ban.offsetWidth;ban.classList.add('show');chime(it.fish.rar);
+  setTimeout(()=>{ban.classList.remove('show');setTimeout(()=>{S.showing=false;showNext()},550)},t.ms);
+}
+function announce(it){
+  if(S.queue.length>=4)S.queue.shift();
+  S.queue.push(it);showNext();
+}
+function addHist(it){
+  const t=T[it.fish.rar]||T.epic;
+  S.hist.unshift(new Date(it.at||Date.now()).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+' '+t.ic+' '+(it.self?'Kamu':'@'+it.user)+' · '+it.fish.name);
+  S.hist.length=Math.min(S.hist.length,15);setText($('mpHist'),S.hist.join('\n'));
+}
+
+/* ---------- koneksi ---------- */
+const wsUrl=t=>(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?token='+encodeURIComponent(t);
+function dot(s,msg){fab.dataset.s=s;if(msg)setText($('mpStatus'),msg)}
+function send(o){const w=S.ws;if(w&&w.readyState===1){try{w.send(JSON.stringify(o));return true}catch(e){}}return false}
+function connect(){
+  const a=window.AUTH;if(!a||!a.token||!/^https?:$/.test(location.protocol))return;
+  if(S.ws&&(S.ws.readyState===0||S.ws.readyState===1)&&S.tok===a.token)return;
+  if(S.ws){try{S.ws.close()}catch(e){}}
+  S.tok=a.token;dot('wait','Menyambung ke server…');
+  let ws;try{ws=new WebSocket(wsUrl(a.token))}catch(e){return sched()}
+  S.ws=ws;
+  ws.onopen=()=>{S.retry=0;S.lastSt='';if(S.room)send({type:'room_join',code:S.room.code,resume:true})};
+  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}route(m)};
+  ws.onclose=ev=>{if(S.ws!==ws)return;S.ws=null;dot('off','Terputus. Mencoba lagi…');if(ev.code===4000){dot('off','Dibuka di tab/perangkat lain. Ketuk 👥 lalu muat ulang untuk menyambung lagi.');S.want=false;return}sched()};
+  ws.onerror=()=>{};
+}
+function sched(){clearTimeout(S.timer);if(!S.want)return;const d=Math.min(30000,1500*Math.pow(1.7,S.retry++));S.timer=setTimeout(connect,d)}
+setInterval(()=>{const a=window.AUTH;if(a&&a.token){if(fab.hidden)fab.hidden=false;if(!S.want&&S.tok!==a.token){S.want=true}if(S.want)connect()}else if(!fab.hidden&&!(a&&a.token)){fab.hidden=true}},1500);
+setInterval(()=>send({type:'ping'}),25000);
+
+/* ---------- pesan dari server ---------- */
+function route(m){
+  switch(m.type){
+    case 'hello':S.me=m.user;S.online=m.online;dot('ok','Tersambung sebagai @'+m.user);upd();break;
+    case 'online':S.online=m.n;upd();break;
+    case 'global_catch':{
+      const self=m.user===S.me,it={user:m.user,fish:m.fish,at:m.at,self};
+      addHist(it);
+      if(gOn.checked)announce(it);
+      break}
+    case 'room':S.room=m.room;if(!m.room){S.feed=[]}renderRoom();break;
+    case 'room_status':{if(S.room){const x=S.room.members.find(y=>y.u===m.user);if(x){x.st=m.st;renderRoom()}}break}
+    case 'room_event':roomEvent(m);break;
+    case 'invite':showInvite(m);break;
+    case 'notice':feedAdd('ℹ️ '+m.message);break;
+    case 'error':feedAdd('⚠️ '+m.message);setText($('mpStatus'),m.message);break;
+  }
+}
+function upd(){
+  const b=fab.querySelector('b');b.hidden=!(S.online>1);setText(b,String(S.online));
+  if(fab.dataset.s==='ok')setText($('mpStatus'),'Tersambung sebagai @'+S.me+' · '+S.online+' pemain online');
+}
+function feedAdd(t){S.feed.unshift(new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+' '+t);S.feed.length=Math.min(S.feed.length,25);setText($('mpFeed'),S.feed.join('\n'))}
+function roomEvent(m){
+  if(m.kind==='join')feedAdd('➕ @'+m.user+' masuk room');
+  else if(m.kind==='leave')feedAdd('➖ @'+m.user+' keluar room');
+  else if(m.kind==='emote'){feedAdd('@'+m.user+' '+m.e);const d=document.createElement('div');d.textContent='@'+m.user+' '+m.e;$('mpEmo').append(d);setTimeout(()=>d.remove(),3100);while($('mpEmo').children.length>4)$('mpEmo').firstChild.remove()}
+  else if(m.kind==='catch'){const t=T[m.fish.rar]||T.rare;feedAdd(t.ic+' '+(m.user===S.me?'Kamu':'@'+m.user)+' dapat '+m.fish.name+' (+'+m.pts+' poin)')}
+}
+
+/* ---------- tampilan room ---------- */
+function renderRoom(){
+  const r=S.room;$('mpOut').hidden=!!r;$('mpIn').hidden=!r;
+  fab.firstChild.textContent=r?'🎮':'👥';
+  if(!r)return;
+  setText($('mpCode'),r.code);
+  const box=$('mpMem');box.textContent='';
+  r.members.forEach(x=>{
+    const d=document.createElement('div');d.className='mem';
+    const n=document.createElement('span');n.className='n';n.textContent=(x.u===r.host?'👑 ':'')+'@'+x.u+(x.u===S.me?' (kamu)':'');
+    const s=document.createElement('span');s.className='s'+(x.st==='bite'||x.st==='fight'?' hot':'');s.textContent=stLabel(x.st);
+    d.append(n,s);box.append(d);
+  });
+  setText($('mpScore'),String(r.score.pts));
+  setText($('mpScoreD'),r.score.catches+' tangkapan langka+ · '+r.score.epic+' epik · '+r.score.legend+' legendaris · '+r.members.length+'/4 pemain');
+}
+['👍','🔥','😂','😱','🎣','👑','🐟','❤️'].forEach(e=>{const b=document.createElement('button');b.type='button';b.textContent=e;b.addEventListener('click',()=>send({type:'emote',e}));$('mpEmoBar').append(b)});
+
+/* ---------- aksi ---------- */
+const need=()=>{if(S.ws&&S.ws.readyState===1)return true;setText($('mpStatus'),'Belum tersambung ke server.');return false};
+$('mpCreate').addEventListener('click',()=>{if(need())send({type:'room_create'})});
+$('mpJoin').addEventListener('click',()=>{const c=$('mpCodeIn').value.trim().toUpperCase();if(c.length!==4){setText($('mpStatus'),'Kode room 4 karakter.');return}if(need())send({type:'room_join',code:c})});
+$('mpCodeIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('mpJoin').click()});
+$('mpLeave').addEventListener('click',()=>{send({type:'room_leave'});S.room=null;renderRoom()});
+$('mpInvBtn').addEventListener('click',()=>{const u=$('mpInvIn').value.trim().toLowerCase().replace(/^@/,'');if(!u)return;if(need()){send({type:'invite',to:u});$('mpInvIn').value=''}});
+$('mpInvIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('mpInvBtn').click()});
+$('mpCode').addEventListener('click',()=>{const c=S.room&&S.room.code;if(!c)return;const done=()=>feedAdd('📋 Kode '+c+' disalin');try{navigator.clipboard.writeText(c).then(done,()=>feedAdd('Kode room: '+c))}catch(e){feedAdd('Kode room: '+c)}});
+$('mpTest').addEventListener('click',()=>{
+  [['epic','Hiu Contoh',120],['legend','Naga Laut Contoh',640]].forEach(([r,n,w],i)=>setTimeout(()=>announce({user:S.me||'kamu',self:true,fish:{rar:r,name:n,w,shiny:0}}),i*300));
+});
+function showInvite(m){
+  const t=$('mpInvT');t.textContent='@'+m.from+' mengajak mabar di room '+m.code+'.';$('mpInv').hidden=false;
+  clearTimeout(S.invT);S.invT=setTimeout(()=>{$('mpInv').hidden=true},25000);
+  $('mpInvYes').onclick=()=>{$('mpInv').hidden=true;if(need()){send({type:'room_join',code:m.code});panel.hidden=false}};
+  $('mpInvNo').onclick=()=>{$('mpInv').hidden=true};
+  chime('epic');
+}
+function open(f){const show=f==null?panel.hidden:f;panel.hidden=!show;if(show){['lcPanel','livePanel'].forEach(id=>{const e=$(id);if(e)e.hidden=true})}}
+fab.addEventListener('click',()=>open());$('mpClose').addEventListener('click',()=>open(false));
+
+/* ---------- hook ke game ---------- */
+window.addEventListener('mancing-catch',e=>{
+  const d=e.detail||{};if(!['rare','epic','legend'].includes(d.rar))return;
+  send({type:'catch',id:'',name:d.name,rar:d.rar,w:d.w,shiny:d.shiny?1:0});
+});
+setInterval(()=>{
+  let st='lobi';try{const g=window.mancingLiveState&&window.mancingLiveState();if(g&&g.started)st=g.state||'idle'}catch(e){}
+  if(st!==S.lastSt&&S.room&&send({type:'status',st}))S.lastSt=st;else if(!S.room)S.lastSt='';
+},700);
+window.addEventListener('pagehide',()=>{S.want=false;try{S.ws&&S.ws.close(1000)}catch(e){}});
+window.MancingMP={state:S,announce};
+})();
+</script>
 </body></html>
