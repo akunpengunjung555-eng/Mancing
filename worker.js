@@ -22,7 +22,47 @@ const USER_RE = /^[a-z0-9_.]{3,20}$/;
 const MUT_OK = new Set(['', 'neon', 'emas', 'kristal', 'pelangi']);
 const MAX_FRIENDS = 100, MAX_PENDING = 30, GIFTS_PER_DAY = 50, INBOX_MAX = 500;
 
-let turnCache = { at: 0, ice: null };
+// ---- TURN: gabungan beberapa penyedia (Metered, cadangan statis, Cloudflare); dikirim semua, browser memilih yang berhasil ----
+const turnCache = {}; // per penyedia: { at, ice }
+async function cachedIce(name, ttl, load) {
+  const c = turnCache[name];
+  if (c && Date.now() - c.at < ttl) return c.ice;
+  let ice = null;
+  try { ice = await load(); } catch (e) { console.error('turn ' + name, e); }
+  if (Array.isArray(ice) && ice.length) { turnCache[name] = { at: Date.now(), ice }; return ice; }
+  return c ? c.ice : null; // gagal ambil baru -> pakai yang lama kalau masih ada
+}
+async function turnServers(env) {
+  const out = [];
+  if (env.METERED_APP && env.METERED_API_KEY) {
+    const ice = await cachedIce('metered', 3600 * 1000, async () => {
+      const r = await fetch('https://' + encodeURIComponent(env.METERED_APP) + '.metered.live/api/v1/turn/credentials?apiKey=' + encodeURIComponent(env.METERED_API_KEY));
+      if (!r.ok) return null;
+      const d = await r.json().catch(() => null);
+      return Array.isArray(d) ? d : null;
+    });
+    if (ice) out.push(...ice);
+  }
+  if (env.TURN_FALLBACK) { // secret berisi JSON: [{"urls":[...],"username":"...","credential":"..."}]
+    const ice = await cachedIce('fallback', 6 * 3600 * 1000, async () => {
+      const d = JSON.parse(env.TURN_FALLBACK), a = Array.isArray(d) ? d : [d];
+      return a.filter(x => x && (typeof x.urls === 'string' || Array.isArray(x.urls))).slice(0, 10);
+    });
+    if (ice) out.push(...ice);
+  }
+  if (env.TURN_KEY_ID && env.TURN_API_TOKEN) {
+    const ice = await cachedIce('cloudflare', 6 * 3600 * 1000, async () => {
+      const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + encodeURIComponent(env.TURN_KEY_ID) + '/credentials/generate-ice-servers', {
+        method: 'POST', headers: { authorization: 'Bearer ' + env.TURN_API_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }),
+      });
+      if (!r.ok) return null;
+      const d = await r.json().catch(() => null);
+      return d && Array.isArray(d.iceServers) ? d.iceServers : null;
+    });
+    if (ice) out.push(...ice);
+  }
+  return out.length ? out : null;
+}
 let ready = false;
 async function init(env) {
   if (ready) return;
@@ -337,30 +377,7 @@ export default {
       const u = await authUser(env, req);
       if (!u) return err(401, 'Sesi berakhir. Silakan masuk lagi.');
       if (path === '/auth/me') return J({ ok: true, user: publicUser(u, env) });
-      if (path === '/turn') { // kredensial TURN untuk suara mic; kunci tetap di server (prioritas: Metered, lalu Cloudflare)
-        const useMetered = env.METERED_APP && env.METERED_API_KEY;
-        if (!useMetered && (!env.TURN_KEY_ID || !env.TURN_API_TOKEN)) return J({ ok: true, iceServers: null });
-        if (!turnCache.ice || Date.now() - turnCache.at > (useMetered ? 3600 * 1000 : 6 * 3600 * 1000)) {
-          let ice = null;
-          if (useMetered) {
-            // METERED_APP = nama app saja, contoh "mancing" (untuk mancing.metered.live)
-            const r = await fetch('https://' + encodeURIComponent(env.METERED_APP) + '.metered.live/api/v1/turn/credentials?apiKey=' + encodeURIComponent(env.METERED_API_KEY));
-            if (!r.ok) return J({ ok: true, iceServers: null });
-            const d = await r.json().catch(() => null);
-            ice = Array.isArray(d) ? d : null;
-          } else {
-            const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + encodeURIComponent(env.TURN_KEY_ID) + '/credentials/generate-ice-servers', {
-              method: 'POST', headers: { authorization: 'Bearer ' + env.TURN_API_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }),
-            });
-            if (!r.ok) return J({ ok: true, iceServers: null });
-            const d = await r.json().catch(() => null);
-            ice = d && Array.isArray(d.iceServers) ? d.iceServers : null;
-          }
-          if (!ice || !ice.length) return J({ ok: true, iceServers: null });
-          turnCache = { at: Date.now(), ice };
-        }
-        return J({ ok: true, iceServers: turnCache.ice });
-      }
+      if (path === '/turn') return J({ ok: true, iceServers: await turnServers(env) }); // kunci tetap di server
       if (path === '/auth/logout') {
         const t = (req.headers.get('authorization') || '').slice(7).trim();
         await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha256(t)).run();
