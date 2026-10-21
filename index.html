@@ -4901,7 +4901,7 @@ function vcMk(peer,dir){
 function vcFlush(pc){pc._q.splice(0).forEach(c=>pc.addIceCandidate(c).catch(()=>{}))}
 function vcDrop(peer,dir,notify){
   const mp=vcMap(dir),pc=mp.get(peer);if(!pc)return;
-  mp.delete(peer);pc.onconnectionstatechange=null;pc.onicecandidate=null;try{pc.close()}catch(e){}
+  clearTimeout(pc._t1);clearTimeout(pc._t2);mp.delete(peer);pc.onconnectionstatechange=null;pc.onicecandidate=null;try{pc.close()}catch(e){}
   if(notify!==false)vcSend(peer,{k:'x',r:dir});
   if(dir==='i'){const a=VC.aud.get(peer);if(a){a.srcObject=null;a.remove();VC.aud.delete(peer)}VC.ana.delete(peer)}
   vcUi();
@@ -4909,6 +4909,8 @@ function vcDrop(peer,dir,notify){
 function vcStartOut(peer){
   if(!VC.on||!VC.stream||VC.out.has(peer))return;
   const pc=vcMk(peer,'o');VC.out.set(peer,pc);
+  pc._t1=setTimeout(()=>{if(VC.out.get(peer)===pc&&!pc.remoteDescription)feedAdd('⚠️ @'+peer+' tidak menjawab mic. Pastikan worker.js baru sudah ter-deploy dan dia memakai index.html terbaru (muat ulang Ctrl+Shift+R).')},8000);
+  pc._t2=setTimeout(()=>{if(VC.out.get(peer)===pc&&pc.remoteDescription&&pc.connectionState!=='connected')feedAdd('⚠️ Gagal tersambung suara ke @'+peer+' (status: '+pc.connectionState+'). Jaringan memblokir sambungan langsung, perlu server TURN.')},16000);
   VC.stream.getTracks().forEach(t=>pc.addTrack(t,VC.stream));
   pc.createOffer().then(o=>pc.setLocalDescription(o)).then(()=>vcSend(peer,{k:'o',sdp:pc.localDescription.sdp})).catch(()=>vcDrop(peer,'o',false));
 }
@@ -4951,7 +4953,7 @@ function vcSync(){
   vcUi();
 }
 function vcOff(){
-  VC.on=false;
+  VC.on=false;VC.my=null;
   for(const p of [...VC.out.keys()])vcDrop(p,'o');
   if(VC.stream){VC.stream.getTracks().forEach(t=>t.stop());VC.stream=null}
   vcUi();
@@ -4963,17 +4965,22 @@ async function vcToggle(){
   try{VC.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false})}
   catch(e){feedAdd('⚠️ Izin mikrofon ditolak atau mic tidak ditemukan.');return}
   if(VC.ac&&VC.ac.state==='suspended')VC.ac.resume().catch(()=>{});
+  try{const AC=window.AudioContext||window.webkitAudioContext;VC.ac=VC.ac||new AC();const an=VC.ac.createAnalyser();an.fftSize=256;VC.ac.createMediaStreamSource(VC.stream).connect(an);VC.my=an}catch(e){VC.my=null}
   VC.on=true;vcSync();
 }
 function vcUi(){
   const b=$('mpMic');if(!b)return;
   b.textContent=VC.on?'🎤 Mic menyala (ketuk untuk mematikan)':'🎤 Nyalakan mic';b.classList.toggle('on',VC.on);
   const box=$('mpVoice');box.textContent='';
+  if(VC.on){const d=document.createElement('div'),n=document.createElement('b'),bar=document.createElement('span');
+    n.textContent='🎙️ Mic kamu';bar.id='mpMyLvl';bar.style.cssText='display:inline-block;width:70px;height:8px;border-radius:5px;background:#06293a;overflow:hidden;position:relative';
+    const f=document.createElement('i');f.style.cssText='position:absolute;left:0;top:0;bottom:0;width:0;background:#5df07a';bar.append(f);d.append(n,bar);box.append(d)}
   const names=[...new Set([...VC.inn.keys(),...VC.out.keys()])].sort();
   names.forEach(u=>{
     const d=document.createElement('div'),n=document.createElement('b'),mb=document.createElement('button');
     const live=VC.inn.has(u)&&VC.aud.has(u);
-    n.textContent=(live?'🔊 ':'🎧 ')+'@'+u+(live?'':' (menyambung…)');n.dataset.u=u;
+    const op=VC.out.get(u);
+    n.textContent=(live?'🔊 ':'🎧 ')+'@'+u+(live?'':' (menyambung…)')+(op?' · kirim: '+({connected:'ok',connecting:'menyambung',new:'menyambung',failed:'GAGAL',disconnected:'putus'}[op.connectionState]||op.connectionState):'');n.dataset.u=u;
     mb.type='button';mb.textContent=VC.mute.has(u)?'Bunyikan':'Bisukan';
     mb.addEventListener('click',()=>{VC.mute.has(u)?VC.mute.delete(u):VC.mute.add(u);const a=VC.aud.get(u);if(a)a.muted=VC.mute.has(u);vcUi()});
     d.append(n,mb);box.append(d);
@@ -4983,6 +4990,7 @@ function vcUi(){
 setInterval(()=>{ /* penanda siapa yang sedang bicara */
   const sp=[];const buf=new Uint8Array(128);
   for(const [u,an] of VC.ana){try{an.getByteTimeDomainData(buf);let mx=0;for(let i=0;i<buf.length;i++)mx=Math.max(mx,Math.abs(buf[i]-128));if(mx>10&&!VC.mute.has(u))sp.push(u)}catch(e){}}
+  if(VC.my){try{const b2=new Uint8Array(128);VC.my.getByteTimeDomainData(b2);let m2=0;for(let i=0;i<b2.length;i++)m2=Math.max(m2,Math.abs(b2[i]-128));const f=document.querySelector('#mpMyLvl i');if(f)f.style.width=Math.min(100,m2*2.2)+'%'}catch(e){}}
   const key=sp.join(',');if(key===VC.sp)return;VC.sp=key;
   document.querySelectorAll('#mpVoice b').forEach(n=>n.classList.toggle('sp',sp.includes(n.dataset.u)));
 },250);
