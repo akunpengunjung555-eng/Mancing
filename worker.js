@@ -457,7 +457,7 @@ export class GameRoom {
   }
   async onMessage(ws, ev) {
     const p = this.peers.get(ws); if (!p) return;
-    if (typeof ev.data !== 'string' || ev.data.length > 1500) return;
+    if (typeof ev.data !== 'string' || ev.data.length > 6000) return; // 'rtc' (SDP suara) butuh ruang lebih besar; pesan lain dibatasi 1500 di bawah
     const now = Date.now();
     // 'view' = status pancingan realtime untuk split-screen mabar; batas laju sendiri (maks ~11/detik), tidak memakan jatah pesan lain
     if (ev.data.length < 420 && ev.data.startsWith('{"type":"view"')) {
@@ -470,6 +470,27 @@ export class GameRoom {
       this.toRoom(r, { type: 'view', u: p.user, v }, ws);
       return;
     }
+    // 'rtc' = sinyal penyambungan mic (WebRTC) antar anggota room. Suara TIDAK lewat server, hanya SDP/ICE.
+    if (ev.data.startsWith('{"type":"rtc"')) {
+      p.rtcTok = Math.min(80, (p.rtcTok ?? 80) + (now - (p.rtcAt || now)) * 0.03); p.rtcAt = now;
+      if (p.rtcTok < 1) return; p.rtcTok -= 1;
+      const r = p.room && this.rooms.get(p.room); if (!r || r.members.size < 2) return;
+      let q; try { q = JSON.parse(ev.data); } catch { return; }
+      const to = cap(q.to, 20).toLowerCase();
+      const target = [...r.members].find(w => w !== ws && this.peers.get(w) && this.peers.get(w).user === to);
+      if (!target) return;
+      const k = String(q.k || '');
+      if (!['o', 'a', 'c', 'x'].includes(k)) return;
+      const out = { type: 'rtc', from: p.user, k, r: q.r === 'i' ? 'i' : 'o' };
+      if (k === 'o' || k === 'a') { const sdp = typeof q.sdp === 'string' ? q.sdp : ''; if (!sdp || sdp.length > 5000) return; out.sdp = sdp; }
+      if (k === 'c') {
+        const c = q.c; if (!c || typeof c.candidate !== 'string' || c.candidate.length > 400) return;
+        out.c = { candidate: c.candidate, sdpMid: c.sdpMid == null ? null : cap(c.sdpMid, 16), sdpMLineIndex: Number.isInteger(c.sdpMLineIndex) ? c.sdpMLineIndex : 0 };
+      }
+      this.send(target, out);
+      return;
+    }
+    if (ev.data.length > 1500) return;
     // batas laju pesan per koneksi: 20 pesan burst, isi ulang 8/detik
     p.tokens = Math.min(20, p.tokens + (now - p.tAt) / 125); p.tAt = now;
     if (p.tokens < 1) return; p.tokens -= 1;
@@ -490,6 +511,11 @@ export class GameRoom {
       case 'emote': {
         const r = p.room && this.rooms.get(p.room);
         if (r && EMOTES.has(m.e) && now - (p.lastEmote || 0) > 1200) { p.lastEmote = now; this.toRoom(r, { type: 'room_event', kind: 'emote', user: p.user, e: m.e }); }
+        return;
+      }
+      case 'chat': {
+        const r = p.room && this.rooms.get(p.room), t = cap(m.t, 120);
+        if (r && t && now - (p.lastChat || 0) > 700) { p.lastChat = now; this.toRoom(r, { type: 'room_event', kind: 'chat', user: p.user, t }, ws); }
         return;
       }
       case 'invite': {
