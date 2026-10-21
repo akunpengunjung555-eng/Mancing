@@ -22,6 +22,7 @@ const USER_RE = /^[a-z0-9_.]{3,20}$/;
 const MUT_OK = new Set(['', 'neon', 'emas', 'kristal', 'pelangi']);
 const MAX_FRIENDS = 100, MAX_PENDING = 30, GIFTS_PER_DAY = 50, INBOX_MAX = 500;
 
+let turnCache = { at: 0, ice: null };
 let ready = false;
 async function init(env) {
   if (ready) return;
@@ -336,6 +337,19 @@ export default {
       const u = await authUser(env, req);
       if (!u) return err(401, 'Sesi berakhir. Silakan masuk lagi.');
       if (path === '/auth/me') return J({ ok: true, user: publicUser(u, env) });
+      if (path === '/turn') { // kredensial TURN Cloudflare untuk suara mic; kunci tetap di server
+        if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) return J({ ok: true, iceServers: null });
+        if (!turnCache.ice || Date.now() - turnCache.at > 6 * 3600 * 1000) {
+          const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + encodeURIComponent(env.TURN_KEY_ID) + '/credentials/generate-ice-servers', {
+            method: 'POST', headers: { authorization: 'Bearer ' + env.TURN_API_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }),
+          });
+          if (!r.ok) return J({ ok: true, iceServers: null });
+          const d = await r.json().catch(() => null);
+          if (!d || !Array.isArray(d.iceServers)) return J({ ok: true, iceServers: null });
+          turnCache = { at: Date.now(), ice: d.iceServers };
+        }
+        return J({ ok: true, iceServers: turnCache.ice });
+      }
       if (path === '/auth/logout') {
         const t = (req.headers.get('authorization') || '').slice(7).trim();
         await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha256(t)).run();

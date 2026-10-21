@@ -4888,6 +4888,15 @@ const VC={on:false,stream:null,out:new Map(),inn:new Map(),mute:new Set(),aud:ne
 const ICE={iceServers:[{urls:['stun:stun.cloudflare.com:3478','stun:stun.l.google.com:19302']}]};
 const vcSend=(to,o)=>send({type:'rtc',to,...o});
 const vcMap=d=>d==='o'?VC.out:VC.inn;
+let vcIceP=null;
+function vcIce(){ /* ambil server TURN dari worker (jika sudah disetel); gagal = tetap pakai STUN */
+  if(vcIceP)return vcIceP;
+  const a=window.AUTH;if(!a||!a.token)return Promise.resolve(null);
+  vcIceP=fetch('/api/turn',{headers:{authorization:'Bearer '+a.token}}).then(r=>r.json()).then(j=>{
+    if(j&&j.ok&&Array.isArray(j.iceServers)&&j.iceServers.length){ICE.iceServers=j.iceServers;VC.turn=true}return null;
+  }).catch(()=>{vcIceP=null;return null});
+  return vcIceP;
+}
 function vcMk(peer,dir){
   const pc=new RTCPeerConnection(ICE);pc._q=[];
   pc.onicecandidate=e=>{if(e.candidate)vcSend(peer,{k:'c',r:dir,c:{candidate:e.candidate.candidate,sdpMid:e.candidate.sdpMid,sdpMLineIndex:e.candidate.sdpMLineIndex}})};
@@ -4910,7 +4919,7 @@ function vcStartOut(peer){
   if(!VC.on||!VC.stream||VC.out.has(peer))return;
   const pc=vcMk(peer,'o');VC.out.set(peer,pc);
   pc._t1=setTimeout(()=>{if(VC.out.get(peer)===pc&&!pc.remoteDescription)feedAdd('⚠️ @'+peer+' tidak menjawab mic. Pastikan worker.js baru sudah ter-deploy dan dia memakai index.html terbaru (muat ulang Ctrl+Shift+R).')},8000);
-  pc._t2=setTimeout(()=>{if(VC.out.get(peer)===pc&&pc.remoteDescription&&pc.connectionState!=='connected')feedAdd('⚠️ Gagal tersambung suara ke @'+peer+' (status: '+pc.connectionState+'). Jaringan memblokir sambungan langsung, perlu server TURN.')},16000);
+  pc._t2=setTimeout(()=>{if(VC.out.get(peer)===pc&&pc.remoteDescription&&pc.connectionState!=='connected')feedAdd('⚠️ Gagal tersambung suara ke @'+peer+' (status: '+pc.connectionState+'). Jaringan memblokir sambungan langsung, '+(VC.turn?'Server TURN aktif tapi tetap gagal; cek VPN/firewall.':'Server TURN belum disetel di worker (lihat petunjuk TURN).'))},16000);
   VC.stream.getTracks().forEach(t=>pc.addTrack(t,VC.stream));
   pc.createOffer().then(o=>pc.setLocalDescription(o)).then(()=>vcSend(peer,{k:'o',sdp:pc.localDescription.sdp})).catch(()=>vcDrop(peer,'o',false));
 }
@@ -4945,6 +4954,7 @@ function rtcIn(m){
   }
 }
 function vcSync(){
+  if(S.room)vcIce();
   if(!S.room){if(VC.on)vcOff();for(const p of [...VC.out.keys()])vcDrop(p,'o',false);for(const p of [...VC.inn.keys()])vcDrop(p,'i',false);vcUi();return}
   const mem=S.room.members.map(x=>x.u).filter(u=>u!==S.me);
   for(const p of [...VC.out.keys()])if(!mem.includes(p))vcDrop(p,'o',false);
@@ -4964,6 +4974,7 @@ async function vcToggle(){
   if(!window.RTCPeerConnection||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){feedAdd('⚠️ Browser ini tidak mendukung mic.');return}
   try{VC.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false})}
   catch(e){feedAdd('⚠️ Izin mikrofon ditolak atau mic tidak ditemukan.');return}
+  await vcIce();
   if(VC.ac&&VC.ac.state==='suspended')VC.ac.resume().catch(()=>{});
   try{const AC=window.AudioContext||window.webkitAudioContext;VC.ac=VC.ac||new AC();const an=VC.ac.createAnalyser();an.fftSize=256;VC.ac.createMediaStreamSource(VC.stream).connect(an);VC.my=an}catch(e){VC.my=null}
   VC.on=true;vcSync();
