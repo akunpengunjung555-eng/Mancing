@@ -3149,6 +3149,22 @@ function renderHome(){
   $('hmBack').hidden=!G.started;
   $('hmLive').hidden=G.started||document.body.classList.contains('nofeat');
 }
+function openModePick(){
+  if(G.started&&G.state!=='idle'){toast('Selesaikan pancingan dulu.');return;}
+  if(sheetKind)closeSheet();
+  G.ui=true;let d=$('modePick');
+  if(!d){
+    const st=document.createElement('style');st.textContent=`#modePick{position:absolute;inset:0;z-index:15;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;background:linear-gradient(rgba(3,23,34,.88),rgba(3,23,34,.97));color:#e9fbff;text-align:center}#modePick[hidden]{display:none}#modePick h2{margin:0 0 6px;font-size:26px}#modePick button{width:min(92vw,360px);padding:14px;border-radius:14px;border:2px solid #2b8495;background:#0c2a3a;color:#bfe6ee;font:600 13px system-ui,sans-serif;cursor:pointer}#modePick button b{display:block;font-size:18px;margin-bottom:3px;color:#fff}#modePick button[data-m=tour]{border-color:#ffc93c}
+`;document.head.appendChild(st);
+    d=document.createElement('div');d.id='modePick';
+    d.innerHTML='<span class="eyebrow">Mancing Laut Dalam</span><h2>Pilih Mode</h2>'+[['solo','🎣','Mode Biasa','Memancing sendiri, santai.'],['mabar','👥','Mode Mabar','Layar terbagi bersama teman dalam satu room.'],['tour','🏆','Mode Turnamen','Semua pemain online bisa ikut. Bagan gugur 1 lawan 1.']].map(x=>'<button type="button" data-m="'+x[0]+'"><b>'+x[1]+' '+x[2]+'</b>'+x[3]+'</button>').join('');
+    d.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;try{SFX.tap();}catch(x){}d.hidden=true;window.__mode=b.dataset.m;openHome(true);if(window.__mpMode)window.__mpMode(b.dataset.m);});
+    $('isleHome').parentNode.appendChild(d);
+    const t=document.querySelector('#isleHome .hm-ttl');
+    if(t){const g=document.createElement('button');g.type='button';g.className='btn alt';g.textContent='🔁 Ganti Mode';g.addEventListener('click',()=>{closeHome();openModePick();});t.appendChild(g);}
+  }
+  d.hidden=false;
+}
 function openHome(first){
   if(!first&&G.started&&G.state!=='idle'){toast('Selesaikan pancingan dulu.');return;}
   if(sheetKind)closeSheet();
@@ -3186,7 +3202,7 @@ async function startUp(m){
   buildRod(RODS.find(r=>r.id===S.rod)||RODS[0]);
   MODE.ready=true;updateHud();checkQuestDot();
   $('boot').classList.add('off');
-  try{openHome(true);}catch(e){}
+  try{openModePick();}catch(e){}
   post({t:'fish-loaded'});
 }
 window.__startGame=startUp;window.__flushGame=flushAll;
@@ -5111,9 +5127,10 @@ body:has(#app.clean) #mpFab{opacity:.12}
 #mpRes .rk{display:flex;gap:8px;padding:6px 8px;margin-top:4px;border-radius:9px;background:#0c2a3a}#mpRes .rk.me{outline:1px solid #ffc93c}
 #mpRes .rk .p{width:26px;text-align:center;font-weight:800;color:#ffc93c}#mpRes .rk .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#mpRes .rk .v{font-weight:800;white-space:nowrap}
 #mpRes button{width:100%;margin-top:12px;min-height:40px;border-radius:10px;border:0;background:#ffc93c;color:#2a1a00;font:800 14px system-ui,sans-serif;cursor:pointer}
+#mpPanel .br{display:flex;gap:8px;overflow-x:auto;margin-top:8px;padding-bottom:4px}#mpPanel .br .rd{display:flex;flex-direction:column;justify-content:space-around;gap:6px;min-width:104px}#mpPanel .br h5{margin:0 0 2px;font-size:10px;letter-spacing:.08em;color:#7fe3e6;text-transform:uppercase;text-align:center}#mpPanel .br .mt{border:1px solid #2b8495;border-radius:8px;background:#0c2a3a;font-size:11px;overflow:hidden}#mpPanel .br .mt.live{border-color:#3ddc84}#mpPanel .br .mt div{display:flex;justify-content:space-between;gap:6px;padding:3px 6px}#mpPanel .br .mt div.w{color:#ffc93c;font-weight:800;background:#3a2a00}#mpPanel .br .mt div.me{outline:1px solid #ffc93c;outline-offset:-1px}
 </style>
 <button id="mpFab" type="button" aria-label="Mabar &amp; notif global" title="Mabar &amp; notif global" data-s="off">👥<i></i><b hidden></b></button>
-<div id="socMenu" hidden><button type="button" id="socF">🤝 Teman</button><button type="button" id="socM">🎮 Mabar</button></div>
+<div id="socMenu" hidden><button type="button" id="socF">🤝 Teman</button><button type="button" id="socM">🎮 Mabar</button><button type="button" id="socT">🏆 Turnamen</button></div>
 <div id="mpBan" aria-live="polite"></div>
 <div id="mpEmo"></div>
 <div id="mpHud" hidden></div>
@@ -5132,6 +5149,9 @@ body:has(#app.clean) #mpFab{opacity:.12}
   <h4>🏅 Papan peringkat turnamen (global)</h4>
   <div class="row"><button class="b" data-by="prize" type="button">Hadiah</button><button class="b" data-by="wins" type="button">Menang</button><button class="b" data-by="pts" type="button">Poin</button></div>
   <div class="log" id="mpGBoard">Ketuk salah satu tombol untuk memuat.</div>
+
+  <h4>🏆 Turnamen Playoff</h4>
+  <div id="tourBox"><div class="st" id="tourSt">Belum ada turnamen.</div><div id="tourFeeRow"><span class="lbl">Biaya daftar (juta koin, 0 = gratis)</span><input id="tourFee" type="number" min="0" step="1" value="0" inputmode="numeric"></div><div class="row"><button class="b pri" id="tourJoin" type="button">🏆 Ikut turnamen</button><button class="b go" id="tourGo" type="button" hidden>▶ Mulai sekarang</button></div><div class="br" id="tourBr"></div><small>Tanpa room: semua yang online boleh ikut. Gugur 1 lawan 1, tiap duel 3 menit, poin ikan tertinggi lolos (seri = tambahan 60 detik). Biaya daftar dari pendaftar pertama; juara dapat 50% total biaya, runner-up 20%. Hasil masuk papan global.</small></div>
 
   <h4>🎮 Mabar</h4>
   <div id="mpOut">
@@ -5259,6 +5279,8 @@ function route(m){
       addHist(it);
       if(gOn.checked)announce(it);
       break}
+    case 'tour_need':feedAdd('ℹ️ Turnamen berbiaya '+fmtC(m.fee)+' koin. Ketuk Ikut turnamen lagi.');break;
+    case 'tour':S.tour=m.t;if(m.t)m.t._rx=performance.now();renderTour();break;
     case 'room':S.room=m.room;if(m.room)m.room._rx=performance.now();if(!m.room){S.feed=[]}renderRoom();break;
     case 'room_status':{if(S.room){const x=S.room.members.find(y=>y.u===m.user);if(x){x.st=m.st;renderRoom()}}break}
     case 'room_event':roomEvent(m);break;
@@ -5418,6 +5440,7 @@ function roomEvent(m){
   else if(m.kind==='emote'){feedAdd('@'+m.user+' '+m.e);const d=document.createElement('div');d.textContent='@'+m.user+' '+m.e;$('mpEmo').append(d);setTimeout(()=>d.remove(),3100);while($('mpEmo').children.length>4)$('mpEmo').firstChild.remove()}
   else if(m.kind==='catch'){const t=T[m.fish.rar]||T.rare;feedAdd(t.ic+' '+(m.user===S.me?'Kamu':'@'+m.user)+' dapat '+m.fish.name+(m.pts?' (+'+m.pts+' poin)':''))}
   else if(m.kind==='start'){S.resSig='';feedAdd('▶ @'+m.by+' memulai pertandingan. Bersiap!');chime('epic')}
+  else if(m.kind==='ot'){feedAdd('⚖️ Poin seri! Babak tambahan 60 detik.');chime('epic')}
   else if(m.kind==='go'){feedAdd('🏁 MULAI! Tangkap ikan langka sebanyak-banyaknya.');chime('legend')}
   else if(m.kind==='end'){feedAdd('🏁 Pertandingan selesai.');showResults(m.results)}
 }
@@ -5425,7 +5448,7 @@ function roomEvent(m){
 /* ---------- tampilan room ---------- */
 const fmtC=n=>{n=Math.max(0,Math.floor(Number(n)||0));if(n>=1e12)return +(n/1e12).toFixed(2)+'T';if(n>=1e9)return +(n/1e9).toFixed(2)+'B';if(n>=1e6)return +(n/1e6).toFixed(n>=1e8?0:1)+'M';if(n>=1e3)return Math.round(n/1e3)+'K';return String(n)};
 const mmss=ms=>{const t=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(t/3600),m=Math.floor(t%3600/60),s2=t%60;return (h?h+':'+String(m).padStart(2,'0'):String(m))+':'+String(s2).padStart(2,'0')};
-const modeName=r=>r.mode==='tourney'?'🏆 Turnamen':'🎮 Mabar biasa';
+const modeName=r=>r.mode==='duel'?'⚔️ Duel Playoff':r.mode==='tourney'?'🏆 Turnamen':'🎮 Mabar biasa';
 const curLeft=r=>Math.max(0,(r.left||0)-(performance.now()-(r._rx||performance.now())));
 const placeOf=(list,i)=>1+list.filter(x=>x.pts>list[i].pts).length;
 const myPts=r=>{const b=(r.board||[]).find(x=>x.u===S.me);return b?b.pts:0};
@@ -5470,7 +5493,7 @@ function renderRoom(){
     d.append(n,s2);box.append(d);
   });
   paintInfo();
-  const sb=$('mpStart'),host=r.host===S.me,can=host&&(r.phase==='lobby'||(r.phase==='ended'&&r.fee===0));
+  const sb=$('mpStart'),host=r.host===S.me,can=host&&r.mode!=='duel'&&(r.phase==='lobby'||(r.phase==='ended'&&r.fee===0));
   sb.hidden=!can;sb.disabled=r.members.length<2;sb.textContent=r.members.length<2?'▶ Mulai (butuh minimal 2 pemain)':(r.phase==='ended'?'🔁 Main lagi (ronde baru)':'▶ Mulai pertandingan');
   const bd=$('mpBoard');bd.textContent='';
   const list=r.board||[];
@@ -5564,6 +5587,40 @@ $('mpChat').addEventListener('submit',e=>{
 
 /* ---------- aksi ---------- */
 const need=()=>{if(S.ws&&S.ws.readyState===1)return true;setText($('mpStatus'),'Belum tersambung ke server.');return false};
+/* ---------- TURNAMEN PLAYOFF: tanpa room, semua online boleh ikut, bagan 1 lawan 1 ---------- */
+function renderTour(){
+  const t=S.tour,st=$('tourSt'),br=$('tourBr'),jb=$('tourJoin'),gb=$('tourGo');if(!st)return;br.textContent='';
+  const inT=!!t&&t.players.includes(S.me),reg=!!t&&t.phase==='reg';
+  jb.hidden=!!t&&t.phase==='run';$('tourFeeRow').hidden=!!t&&t.phase!=='done';jb.textContent=reg&&inT?'🚪 Batal ikut':'🏆 Ikut turnamen';
+  gb.hidden=!(reg&&t.host===S.me&&t.players.length>=2);
+  if(!t)st.textContent='Belum ada turnamen. Jadilah yang pertama mendaftar!';
+  else if(reg)st.textContent='Pendaftaran: '+t.players.length+' pemain · '+(t.fee>0?'biaya '+fmtC(t.fee)+' · pool '+fmtC(t.pool):'gratis')+' · mulai dalam '+mmss(Math.max(0,t.left-(performance.now()-t._rx)));
+  else if(t.phase==='run')st.textContent='Turnamen berjalan'+(inT?' · semoga menang!':' · kamu menonton');
+  else st.textContent='👑 Juara: @'+t.champ+(t.champ===S.me?' (kamu!)':'')+(t.prize&&t.prize[t.champ]?' · hadiah '+fmtC(t.prize[t.champ]):'');
+  if(!t||!t.rounds.length)return;
+  const n=t.rounds.length;
+  t.rounds.forEach((rd,i)=>{
+    const c=document.createElement('div');c.className='rd';const h=document.createElement('h5');h.textContent=i===n-1?'Final':i===n-2?'Semifinal':'Babak '+(i+1);c.append(h);
+    rd.forEach(m=>{
+      const x=document.createElement('div');x.className='mt'+(m.live?' live':'');
+      [[m.a,m.sa],[m.b,m.sb]].forEach(([u,s])=>{
+        const l=document.createElement('div');l.className=(m.w&&m.w===u?'w':'')+(u&&u===S.me?' me':'');
+        const a=document.createElement('span'),b=document.createElement('span');a.textContent=u?'@'+u:(m.w&&!u?'bye':'—');b.textContent=m.w&&u&&m.b?String(s):(m.live?'⚔️':'');
+        l.append(a,b);x.append(l);
+      });
+      c.append(x);
+    });
+    br.append(c);
+  });
+}
+$('tourJoin').addEventListener('click',async()=>{if(!need())return;const t=S.tour,reg=!!t&&t.phase==='reg';if(reg&&t.players.includes(S.me))return send({type:'t_leave'});
+  const feeM=Math.floor(Number($('tourFee').value)||0),fee=reg?t.fee:feeM*1e6;
+  if(!reg&&(feeM<0||(feeM>0&&feeM<100))){setText($('mpStatus'),'Biaya minimal 100 juta koin (atau 0 = gratis).');return}
+  if(fee>0&&!confirm('Bayar '+fmtC(fee)+' koin untuk ikut turnamen? Juara dapat 50% total biaya, runner-up 20%.'))return;
+  await pushWallet();send({type:'t_join',fee})});
+$('tourGo').addEventListener('click',()=>{if(need())send({type:'t_start'})});
+setInterval(()=>{if(S.tour&&S.tour.phase==='reg'&&!panel.hidden)renderTour()},1000);
+window.__mpMode=k=>{if(k==='solo')return;open(true);const e=$(k==='tour'?'tourBox':'mpOut');if(e)setTimeout(()=>e.scrollIntoView({block:'start'}),60)};
 $('mpCreate').addEventListener('click',doCreate);
 $('mpJoin').addEventListener('click',()=>{const c=$('mpCodeIn').value.trim().toUpperCase();if(c.length!==4){setText($('mpStatus'),'Kode room 4 karakter.');return}if(need())joinCode(c)});
 $('mpCodeIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('mpJoin').click()});
@@ -5595,6 +5652,7 @@ function open(f){const show=f==null?panel.hidden:f;panel.hidden=!show;if(show){[
   ['keydown','keyup','keypress','pointerdown'].forEach(t=>menu.addEventListener(t,e=>e.stopPropagation()));
   $('socF').addEventListener('click',()=>{shut();$('bFriends').click()});
   $('socM').addEventListener('click',()=>{shut();open(true)});
+  $('socT').addEventListener('click',()=>{shut();window.__mpMode('tour')});
   addEventListener('resize',shut);
 })();
 $('mpClose').addEventListener('click',()=>open(false));
