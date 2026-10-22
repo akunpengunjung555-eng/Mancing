@@ -6,6 +6,24 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script>if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}</script>
+<style id="ifStyle">
+.ifsum{margin:0 0 10px;font-size:13px;line-height:1.4;color:#cfe6ec}
+.ifsum b{color:#fff}
+.ifh{margin:14px 0 6px;font-size:13px;font-weight:800;display:flex;justify-content:space-between;align-items:baseline}
+.ifh small{font-size:11px;color:var(--muted);font-weight:800}
+.ifrow{display:flex;align-items:center;gap:10px;padding:8px 10px;margin-bottom:6px;border-radius:14px;background:rgba(227,250,245,.06);border:1px solid var(--line)}
+.ifrow.no{background:rgba(0,0,0,.22)}
+.ifrow .ifimg{width:64px;height:46px;flex:none;object-fit:contain}
+.ifrow .ifimg.sil{filter:brightness(0) opacity(.45)}
+.ifx{flex:1;min-width:0;display:grid;gap:1px}
+.ifx b{font-size:14px}
+.ifrow.no .ifx b{color:var(--muted)}
+.ifx small{font-size:11px;color:var(--muted);font-weight:700;line-height:1.3}
+.ifst{flex:none;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid currentColor}
+.ifst.ok{color:#3dd68c}
+.ifst.no{color:#ff9a8a}
+.ifback{margin-bottom:10px}
+</style>
 </head><body class="nofeat">
 <style>
 /* Layout: kanvas 3D penuh layar, HUD kaca di atas, tombol aksi bulat di bawah, sheet naik dari bawah */
@@ -2283,7 +2301,7 @@ function isleHTML(){
     const cur=i===ISLE_CUR,pct=legendPct(i,2),bar=Math.min(100,pct/40*100);
     h+=`<div class="isl ${cur?'cur':''}" style="--ac:${I.ac}"><div class="isl-h"><span class="isl-e">${I.e}</span><div><b>${I.n}</b><small>Peluang legendaris ×${I.lg.toFixed(1)} · ${rate(I.lg)}</small></div></div><p>${I.txt}</p><div class="isl-lg"><span>🌟 ${I.lgTxt}</span><div class="isl-bar"><i style="width:${bar}%"></i></div><small>Sekitar ${pct<10?pct.toFixed(1):Math.round(pct)}% per lemparan jauh (tanpa titik harta), dengan hoki kamu sekarang.</small></div><div class="isl-f">`;
     ['legend','epic','rare','common'].forEach(k=>I.pool[k].forEach(id=>{const d=SPECIES.find(x=>x.id===id);if(d)h+=`<span style="color:${RAR_CSS[k]}" title="${RAR_NAME[k]}">${S.col[id]?'✓ ':''}${d.name}</span>`;}));
-    h+=`</div><button class="btn" data-isle="${i}" ${cur?'disabled':''}>${cur?'Sedang di sini':'⛵ Berlayar ke sini'}</button></div>`;
+    h+=`</div><button class="btn alt" data-ifish="${i}" type="button">🐟 Daftar ikan & yang belum didapat</button><button class="btn" data-isle="${i}" ${cur?'disabled':''}>${cur?'Sedang di sini':'⛵ Berlayar ke sini'}</button></div>`;
   });
   return h;
 }
@@ -3079,7 +3097,7 @@ function renderHome(){
   let h='';
   ISLES.forEach((I,i)=>{
     const open=isleOpen(i),cur=G.started&&i===ISLE_CUR,pr=isleProg(i),pct=pr[1]?Math.round(pr[0]/pr[1]*100):0,cost=ISLE_COST[i]||0;
-    h+=`<div class="hm-c ${open?'':'lk'} ${cur?'cur':''}" style="--ac:${I.ac}"><div class="hm-h"><span class="hm-e">${open?I.e:'🔒'}</span><div><b>${I.n}</b><small>${open?(cur?'Sedang di sini':'Terbuka'):'Terkunci'} · Legendaris ×${I.lg.toFixed(1)}</small></div></div><p>${I.txt}</p><div class="isl-bar"><i style="width:${pct}%"></i></div><small>Ikan pulau ini: ${pr[0]}/${pr[1]}</small>`;
+    h+=`<div class="hm-c ${open?'':'lk'} ${cur?'cur':''}" style="--ac:${I.ac}"><div class="hm-h"><span class="hm-e">${open?I.e:'🔒'}</span><div><b>${I.n}</b><small>${open?(cur?'Sedang di sini':'Terbuka'):'Terkunci'} · Legendaris ×${I.lg.toFixed(1)}</small></div></div><p>${I.txt}</p><div class="isl-bar"><i style="width:${pct}%"></i></div><small>Ikan pulau ini: ${pr[0]}/${pr[1]} · belum didapat: ${pr[1]-pr[0]}</small><button class="btn alt" data-hfish="${i}" type="button">🐟 Lihat daftar ikan</button>`;
     if(open)h+=`<button class="btn" data-hgo="${i}">${cur?'Lanjut memancing':(G.started?'⛵ Berlayar ke sini':'🎣 Mulai memancing')}</button>`;
     else h+=`<div class="hm-lk"><button class="btn" data-hbuy="${i}" ${S.coins<cost?'disabled':''}>🔓 Tebus ${fmt(cost)} koin</button><small>Atau tangkap semua ikan pulau ini (${pr[0]}/${pr[1]}) untuk membukanya gratis.</small></div>`;
     h+='</div>';
@@ -3101,6 +3119,7 @@ function goIsle(i){
 }
 $('isleHome').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||b.disabled)return;
+  if(b.dataset.hfish!==undefined){openIsleFish(+b.dataset.hfish,'home');return;}
   if(b.dataset.hbuy!==undefined){buyIsle(+b.dataset.hbuy);return;}
   if(b.dataset.hgo!==undefined){SFX.tap();goIsle(+b.dataset.hgo);return;}
   if(b.id==='hmBack'){closeHome();return;}
@@ -3242,6 +3261,44 @@ renderSheet=function(){
   if(sheetKind==='friends'){$('sheetTitle').textContent='Teman';$('sheetBody').innerHTML=friendsHTML();return;}
   _rs();
 };
+/* ===== Daftar ikan per pulau: yang tersedia + yang belum didapat ===== */
+let ifIdx=0,ifMode='all',ifFrom='home';
+function ifZoneText(d){return (!d.zn||!d.zn.length)?'Semua zona':d.zn.map(z=>ZONES[z]).join(' · ');}
+function ifishHTML(){
+  const I=ISLES[ifIdx],pr=isleProg(ifIdx),got=pr[0],tot=pr[1],miss=tot-got,pct=tot?Math.round(got/tot*100):0;
+  let h=`<button class="btn alt ifback" data-ifback="1" type="button">← Kembali</button>`;
+  h+=`<p class="ifsum"><b>${got} dari ${tot}</b> jenis ikan pulau ini sudah didapat · <b>${miss}</b> belum.</p><div class="isl-bar" style="--ac:${I.ac}"><i style="width:${pct}%"></i></div>`;
+  h+=`<div class="tabs"><button data-ifmode="all" class="${ifMode==='all'?'on':''}" type="button">Semua (${tot})</button><button data-ifmode="miss" class="${ifMode==='miss'?'on':''}" type="button">Belum didapat (${miss})</button></div>`;
+  let any=false;
+  ['legend','epic','rare','common'].forEach(k=>{
+    const ids=[...new Set(I.pool[k])].map(id=>SPECIES.find(x=>x.id===id)).filter(Boolean);
+    const have=ids.filter(d=>S.col[d.id]).length;
+    const list=ifMode==='miss'?ids.filter(d=>!S.col[d.id]):ids;
+    if(!list.length)return;any=true;
+    h+=`<div class="ifh" style="color:${RAR_CSS[k]}"><span>${RAR_NAME[k]}</span><small>${have}/${ids.length} didapat</small></div>`;
+    list.forEach(d=>{const e=S.col[d.id];
+      h+=`<div class="ifrow ${e?'':'no'}">${fimg(d.id,false,'ifimg'+(e?'':' sil'))}<div class="ifx"><b>${d.name}</b><small>Muncul di: ${ifZoneText(d)}</small><small>${e?`Sudah ditangkap x${e.count} · terberat ${e.best.toFixed(1)} kg`:'Belum pernah ditangkap'}</small></div><span class="ifst ${e?'ok':'no'}">${e?'✓ Didapat':'Belum'}</span></div>`;});
+  });
+  if(!any)h+=`<p class="ifsum">Semua ikan di pulau ini sudah kamu dapat. 🎉</p>`;
+  return h;
+}
+function openIsleFish(i,from){
+  if(!ISLES[i])return;
+  ifIdx=i;ifFrom=from||'home';ifMode='all';sheetKind='ifish';G.ui=true;$('sheetWrap').hidden=false;renderSheet();SFX.tap();
+}
+const _rs2=renderSheet;
+renderSheet=function(){
+  if(sheetKind==='ifish'){const I=ISLES[ifIdx];$('sheetTitle').textContent=I.e+' '+I.n;$('sheetBody').innerHTML=ifishHTML();return;}
+  _rs2();
+};
+$('sheetBody').addEventListener('click',e=>{
+  const bt=e.target.closest('button[data-ifish],button[data-ifmode],button[data-ifback]');if(!bt)return;
+  const d=bt.dataset;
+  if(d.ifish!==undefined){openIsleFish(+d.ifish,'isle');return;}
+  if(sheetKind!=='ifish')return;
+  if(d.ifmode){ifMode=d.ifmode;SFX.tap();renderSheet();return;}
+  if(d.ifback){if(ifFrom==='isle'){sheetKind='isle';SFX.tap();renderSheet();}else closeSheet();}
+});
 $('sheetBody').addEventListener('click',e=>{
   if(sheetKind!=='pond')return;const bt=e.target.closest('button[data-pa],button[data-ptab]');if(!bt||bt.disabled)return;
   const d=bt.dataset,i=+d.pi;
