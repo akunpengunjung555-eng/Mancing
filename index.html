@@ -93,6 +93,12 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 .pull-b.on{opacity:1;background:var(--coral);border-color:#fff;box-shadow:0 0 24px var(--coral);animation:pullPulse .3s infinite alternate}
 .pull-b:active{filter:brightness(1.2)}
 @keyframes pullPulse{to{transform:scale(1.14)}}
+#pullMsg{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);white-space:nowrap;padding:4px 12px;border-radius:999px;background:rgba(3,23,34,.82);border:1px solid var(--line);color:var(--foam);font-size:12px;font-weight:800;letter-spacing:.03em;pointer-events:none;text-shadow:0 1px 3px #021018}
+#pullMsg.on{background:var(--coral);border-color:#fff;color:#fff;animation:pullPulse .3s infinite alternate}
+#pullMsg.ok{background:#2fae6a;border-color:#fff;color:#fff}
+#pullMsg.bad{background:#7a2a22;border-color:#ff8a7a;color:#fff}
+.ft-prog.hit{animation:progHit .35s ease-out}
+@keyframes progHit{0%{box-shadow:0 0 0 0 #ffd23c;transform:scaleX(1.8)}100%{box-shadow:0 0 0 12px transparent;transform:none}}
 #flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 38%,var(--fc,#fff) 0,transparent 68%)}
 #flash.go{animation:flash 1s ease-out}
 @keyframes flash{0%{opacity:.85}100%{opacity:0}}
@@ -191,7 +197,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
     <div class="ft-track" id="ftTrack"><div class="ft-zone" id="ftZone"></div><div class="ft-fish" id="ftFish"></div></div>
     <div class="ft-prog"><i id="ftProg"></i></div>
   </div>
-  <div id="pullBtns" hidden><button id="pullL" class="pull-b" type="button" aria-label="Tarik ke kiri">◀<small>KIRI</small></button><button id="pullR" class="pull-b" type="button" aria-label="Tarik ke kanan">▶<small>KANAN</small></button></div>
+  <div id="pullBtns" hidden><button id="pullL" class="pull-b" type="button" aria-label="Tarik ke kiri">◀<small>KIRI</small></button><button id="pullR" class="pull-b" type="button" aria-label="Tarik ke kanan">▶<small>KANAN</small></button><span id="pullMsg">Siaga: tunggu ikan menarik</span></div>
   <div id="power" hidden><div class="bar"><i id="powerFill"></i></div><span id="powerLbl">Perairan Dangkal</span></div>
 
   <div class="bottom">
@@ -1845,16 +1851,22 @@ function startFight(){
   $('ftZone').style.height=size*100+'%';SFX.splash(false);vib(30);
 }
 /* ===== Tarikan samping: ikan menarik joran ke kiri / kanan, tekan panah sesuai arah (atau tombol ← →) ===== */
-function setPullUI(side){const l=$('pullL'),r=$('pullR');if(!l||!r)return;l.classList.toggle('on',side<0);r.classList.toggle('on',side>0);}
+let _pmT=0;
+function pullMsg(t,cls,hold){const m=$('pullMsg');if(!m)return;m.textContent=t;m.className=cls||'';clearTimeout(_pmT);if(hold)_pmT=setTimeout(()=>setPullUI(G.f?G.f.side:0),hold);}
+function setPullUI(side){const l=$('pullL'),r=$('pullR');if(!l||!r)return;l.classList.toggle('on',side<0);r.classList.toggle('on',side>0);clearTimeout(_pmT);
+  if(side)pullMsg('Ikan narik ke '+(side<0?'KIRI ◀':'KANAN ▶')+' - tekan '+(side<0?'KIRI':'KANAN')+'!','on');
+  else pullMsg('Siaga: tunggu ikan menarik','');}
+function barFx(){const p=document.querySelector('.ft-prog');if(!p)return;p.classList.remove('hit');void p.offsetWidth;p.classList.add('hit');}
 const pullCd=()=>Math.max(1.4,rand(2.2,4.2)-RAR.indexOf(G.fishDef.rar)*.3);
 function pullPress(dir){
   if(G.state!=='fight'||!G.f||!liveLenient())return;
-  const F=G.f;if(F.side===0)return;
+  const F=G.f;
+  if(F.side===0){G.pullX=dir*.9;pullMsg('Belum ada tarikan - tunggu tombol menyala','',700);tone(300,.05,'sine',.05);return;}
   if(dir===F.side){
-    F.prog=clamp(F.prog+.07,0,1);G.pullX=-F.side*1.1;F.side=0;F.sideCd=pullCd();setPullUI(0);
+    F.prog=clamp(F.prog+.07,0,1);F.zv=clamp(F.zv+1.1,-1.4,1.6);barFx();pullMsg('BAGUS! Bar naik +7% & zona terdorong','ok',900);G.pullX=-F.side*1.1;F.side=0;F.sideCd=pullCd();$('pullL').classList.remove('on');$('pullR').classList.remove('on');
     G.tens=Math.min(G.tens,.5);G.shake=Math.max(G.shake,.03);tone(660,.12,'triangle',.1);splashFx(G.bobBase.x,G.bobBase.z,8,.6);vib(20);
   }else{
-    F.prog=clamp(F.prog-.03,0,1);G.shake=Math.max(G.shake,.04);tone(200,.1,'square',.08);vib(40);
+    F.prog=clamp(F.prog-.03,0,1);barFx();pullMsg('SALAH ARAH! Bar turun -3%','bad',900);G.shake=Math.max(G.shake,.04);tone(200,.1,'square',.08);vib(40);
   }
 }
 function updateFight(dt){
@@ -5443,7 +5455,7 @@ window.addEventListener('pagehide',()=>{S.want=false;try{S.ws&&S.ws.close(1000)}
 /* ---------- SPLIT-SCREEN MABAR (2 → 2 layar, 3-4 → 4 layar, 5-6 → 6 layar) ---------- */
 const SP={on:LS.get('mpSplit')!=='0',ov:null,tiles:new Map(),V:new Map(),n:0,raf:0,lastJ:'',lastT:0,gl:$('gl'),glCss:''};
 SP.glCss=SP.gl.style.cssText;
-(function(){const c=document.createElement('style');c.textContent='#mpSplit{position:absolute;inset:0;pointer-events:none}#mpSplit .t{position:absolute;box-sizing:border-box;overflow:hidden;border:2px solid #0b3a4d;background:transparent}#mpSplit canvas{display:block;width:100%;height:100%}#mpSplit .me{position:absolute;box-sizing:border-box;border:2px solid #ffc93c;color:#ffc93c;font:800 11px system-ui,sans-serif;padding:3px 8px;text-shadow:0 1px 3px #000;background:linear-gradient(#0008,transparent)}#mpSplitBtn{margin-top:8px;width:100%}#app.split .hud{right:auto;width:var(--sw);box-sizing:border-box;padding:6px 8px;gap:4px}#app.split .hud #bMus,#app.split .hud #bSfx,#app.split .hud #bGfx,#app.split .hud #bOut{display:none}#app.split .hud .ibtn{width:32px;height:32px}#app.split #subbar,#app.split #zoneChip,#app.split #hint,#app.split #penyiar,#app.split #cm,#app.split #cmLog,#app.split #liveBar,#app.split #bLive,#app.split #fpsBox,#app.split .navgrp{display:none!important}#app.split .bottom{bottom:auto;right:auto;width:var(--sw);top:calc(var(--sh) - 92px);padding:0;display:flex;justify-content:center}#app.split #act{width:74px;height:74px;border-width:3px;box-shadow:0 4px 0 #5a3407,0 8px 14px rgba(0,0,0,.45)}#app.split #act b{font-size:16px}#app.split #act small{display:none}#app.split #power{z-index:40}#mpSplit .mc{position:absolute;left:0;top:0;display:block;pointer-events:none}#app.split #power{bottom:auto;top:calc(var(--sh) - 136px);left:calc(var(--sw)/2);width:min(200px,calc(var(--sw) - 32px))}#app.split #fight{left:auto;right:calc(100% - var(--sw) + 12px);top:calc(var(--sh)*.18);height:calc(var(--sh)*.52);z-index:40}#app.split #toast{top:44px;left:calc(var(--sw)/2);max-width:calc(var(--sw) - 24px)}';document.head.append(c)})();
+(function(){const c=document.createElement('style');c.textContent='#mpSplit{position:absolute;inset:0;pointer-events:none}#mpSplit .t{position:absolute;box-sizing:border-box;overflow:hidden;border:2px solid #0b3a4d;background:transparent}#mpSplit canvas{display:block;width:100%;height:100%}#mpSplit .me{position:absolute;box-sizing:border-box;border:2px solid #ffc93c;color:#ffc93c;font:800 11px system-ui,sans-serif;padding:3px 8px;text-shadow:0 1px 3px #000;background:linear-gradient(#0008,transparent)}#mpSplitBtn{margin-top:8px;width:100%}#app.split .hud{right:auto;width:var(--sw);box-sizing:border-box;padding:6px 8px;gap:4px}#app.split .hud #bMus,#app.split .hud #bSfx,#app.split .hud #bGfx,#app.split .hud #bOut{display:none}#app.split .hud .ibtn{width:32px;height:32px}#app.split #subbar,#app.split #zoneChip,#app.split #hint,#app.split #penyiar,#app.split #cm,#app.split #cmLog,#app.split #liveBar,#app.split #bLive,#app.split #fpsBox,#app.split .navgrp{display:none!important}#app.split .bottom{bottom:auto;right:auto;width:var(--sw);top:calc(var(--sh) - 92px);padding:0;display:flex;justify-content:center}#app.split #act{width:74px;height:74px;border-width:3px;box-shadow:0 4px 0 #5a3407,0 8px 14px rgba(0,0,0,.45)}#app.split #act b{font-size:16px}#app.split #act small{display:none}#app.split #power{z-index:40}#mpSplit .mc{position:absolute;left:0;top:0;display:block;pointer-events:none}#app.split #power{bottom:auto;top:calc(var(--sh) - 136px);left:calc(var(--sw)/2);width:min(200px,calc(var(--sw) - 32px))}#app.split #fight{left:auto;right:calc(100% - var(--sw) + 12px);top:calc(var(--sh)*.18);height:calc(var(--sh)*.52);z-index:40}#app.split #toast{top:44px;left:calc(var(--sw)/2);max-width:calc(var(--sw) - 24px)}#app.split #pullBtns{left:0;right:auto;bottom:auto;width:var(--sw);box-sizing:border-box;top:calc(var(--sh) - 88px);padding:0 8px;z-index:40}#app.split .pull-b{width:60px;height:60px;font-size:26px;border-width:2px}#app.split .pull-b small{font-size:8px;margin-top:1px}#app.split #pullMsg{font-size:10px;padding:3px 8px;max-width:calc(var(--sw) - 16px);overflow:hidden;text-overflow:ellipsis}';document.head.append(c)})();
 const spBtn=document.createElement('button');spBtn.type='button';spBtn.id='mpSplitBtn';$('mpIn').append(spBtn);
 const spTxt=()=>{spBtn.textContent=SP.on?'▦ Split-screen: AKTIF (ketuk untuk matikan)':'▦ Split-screen: MATI (ketuk untuk aktifkan)'};spTxt();
 spBtn.addEventListener('click',()=>{SP.on=!SP.on;LS.set('mpSplit',SP.on?'1':'0');spTxt();applySplit()});
