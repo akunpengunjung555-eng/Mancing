@@ -86,6 +86,13 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 .ft-fish svg{width:100%;height:100%;display:block;filter:drop-shadow(0 0 5px rgba(255,255,255,.6))}
 .ft-prog{position:relative;width:10px;border-radius:6px;background:var(--glass);border:1px solid var(--line);overflow:hidden}
 .ft-prog i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(var(--gold),var(--coral));height:30%}
+#pullBtns{position:absolute;left:0;right:0;bottom:calc(160px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;padding:0 84px 0 14px;pointer-events:none;z-index:5}
+#pullBtns[hidden]{display:none}
+.pull-b{pointer-events:auto;touch-action:none;width:74px;height:74px;border-radius:50%;border:3px solid var(--line);background:var(--glass);color:#fff;font-size:34px;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;opacity:.55;transition:opacity .1s,background .1s;-webkit-tap-highlight-color:transparent;user-select:none;cursor:pointer}
+.pull-b small{font-size:10px;letter-spacing:.08em;margin-top:3px}
+.pull-b.on{opacity:1;background:var(--coral);border-color:#fff;box-shadow:0 0 24px var(--coral);animation:pullPulse .3s infinite alternate}
+.pull-b:active{filter:brightness(1.2)}
+@keyframes pullPulse{to{transform:scale(1.14)}}
 #flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 38%,var(--fc,#fff) 0,transparent 68%)}
 #flash.go{animation:flash 1s ease-out}
 @keyframes flash{0%{opacity:.85}100%{opacity:0}}
@@ -184,6 +191,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
     <div class="ft-track" id="ftTrack"><div class="ft-zone" id="ftZone"></div><div class="ft-fish" id="ftFish"></div></div>
     <div class="ft-prog"><i id="ftProg"></i></div>
   </div>
+  <div id="pullBtns" hidden><button id="pullL" class="pull-b" type="button" aria-label="Tarik ke kiri">◀<small>KIRI</small></button><button id="pullR" class="pull-b" type="button" aria-label="Tarik ke kanan">▶<small>KANAN</small></button></div>
   <div id="power" hidden><div class="bar"><i id="powerFill"></i></div><span id="powerLbl">Perairan Dangkal</span></div>
 
   <div class="bottom">
@@ -1697,7 +1705,7 @@ function updateSpot(t,dt){
 const G={
   state:'idle',started:false,pressed:false,power:0,pdir:1,aim:0,ui:false,
   land:new V3(),start:new V3(),castT:0,castH:3,zone:0,inSpot:false,
-  waitT:0,biteAt:4,biteT:0,nibbleT:0,fishDef:null,shiny:false,weight:0,H:null,ang:0,hAng0:0,
+  waitT:0,biteAt:4,biteT:0,nibbleT:0,fishDef:null,shiny:false,weight:0,H:null,ang:0,hAng0:0,pullX:0,
   f:null,tens:.5,reelT:0,rodPitch:.3,leapT:0,leapFrom:new V3(),shake:0,result:null,retractT:0,bobBase:new V3(),spray:0
 };
 const DISPLAY=new V3(0,2.9,2.0);
@@ -1716,40 +1724,40 @@ const zoneOf=p=>p<.35?0:(p<.7?1:2);
 const ISLES=[
  {n:'Dermaga Senja',e:'🌇',ac:'#eaa47c',lg:1.0,
   txt:'Pelabuhan nelayan tua saat matahari terbenam. Tangkapan harian melimpah, cocok untuk pemula.',
-  lgTxt:'Marlin Biru kadang melintas saat senja, tapi jarang.',
-  pool:{common:['teri','layang','kembung','kakap','baronang'],rare:['barakuda','tuna','kerapu'],epic:['hiu','pari'],legend:['marlin']}},
+  lgTxt:'Marlin Biru dan Tuna Sirip Biru Raksasa kadang melintas saat senja, tapi jarang.',
+  pool:{common:['teri','layang','kembung','kakap','baronang','bandeng'],rare:['barakuda','tuna','kerapu','kakapputih'],epic:['hiu','pari','bawalemas'],legend:['marlin','tunaraksasa']}},
  {n:'Teluk Pagi Cerah',e:'☀️',ac:'#7fc0e8',lg:1.2,
   txt:'Teluk berair jernih dengan ikan karang berwarna-warni di bawah sinar pagi.',
-  lgTxt:'Arwana Emas berenang di perairan jernih ini.',
-  pool:{common:['badut','kepe','baronang','kembung'],rare:['mandarin','singa','buntal','napoleon'],epic:['angel','idol','handfish'],legend:['naga']}},
+  lgTxt:'Arwana Emas dan Naga Laut Giok berenang di perairan jernih ini.',
+  pool:{common:['badut','kepe','baronang','kembung','julung'],rare:['mandarin','singa','buntal','napoleon','buntalduri'],epic:['angel','idol','handfish'],legend:['naga','nagalaut']}},
  {n:'Pantai Fajar Jambu',e:'🌸',ac:'#ffb0c8',lg:1.4,
   txt:'Pantai berwarna jambu saat fajar. Ubur-ubur dan ikan merah muda berkumpul di sini.',
-  lgTxt:'Opah Raja naik dari kedalaman saat langit memerah.',
-  pool:{common:['teri','kembung','badut','layang'],rare:['ubur','buntal','mandarin'],epic:['handfish','ubur_api','angel'],legend:['opah']}},
+  lgTxt:'Opah Raja dan Ubur-ubur Pelangi naik dari kedalaman saat langit memerah.',
+  pool:{common:['teri','kembung','badut','layang','belanak'],rare:['ubur','buntal','mandarin','uburpink'],epic:['handfish','ubur_api','angel'],legend:['opah','uburpelangi']}},
  {n:'Laut Bulan Purnama',e:'🌕',ac:'#9fb8ff',lg:1.8,
   txt:'Laut tenang di bawah bulan purnama. Penghuni laut raksasa naik ke dekat permukaan saat malam.',
-  lgTxt:'Manta Raksasa menyapu perairan ini di bawah cahaya bulan.',
-  pool:{common:['teri','layang','kakap','kembung'],rare:['tuna','barakuda','kerapu'],epic:['pari','mola','lentera','elang'],legend:['abyss']}},
+  lgTxt:'Manta Raksasa dan Pari Samudra Emas menyapu perairan ini di bawah cahaya bulan.',
+  pool:{common:['teri','layang','kakap','kembung'],rare:['tuna','barakuda','kerapu','tongkol'],epic:['pari','mola','lentera','elang','hiumartil'],legend:['abyss','pari_emas']}},
  {n:'Samudra Aurora',e:'🌌',ac:'#9affd8',lg:2.7,
   txt:'Samudra dingin berhias cahaya aurora. Makhluk bercahaya dan raksasa lembut berenang di sini.',
-  lgTxt:'Hiu Paus dan Ubur-ubur Kristal hanya sering muncul di sini.',
-  pool:{common:['teri','layang','kembung'],rare:['ubur','tuna','napoleon'],epic:['mola','lentera','pedang'],legend:['hiupaus','ubur_kristal']}},
+  lgTxt:'Hiu Paus, Ubur-ubur Kristal, dan Leviathan Mini hanya sering muncul di sini.',
+  pool:{common:['teri','layang','kembung'],rare:['ubur','tuna','napoleon'],epic:['mola','lentera','pedang','pari_hantu'],legend:['hiupaus','ubur_kristal','leviathan']}},
  {n:'Selat Badai Petir',e:'⛈️',ac:'#9aa8b8',lg:2.1,
   txt:'Selat berombak ganas disambar petir. Pemangsa besar berkeliaran, ikan kecil jarang selamat.',
-  lgTxt:'Marlin Biru dan Manta Raksasa memburu mangsa di tengah badai.',
-  pool:{common:['kakap','layang','baronang'],rare:['barakuda','tuna','kerapu'],epic:['hiu','pedang','elang'],legend:['marlin','abyss']}},
+  lgTxt:'Marlin Biru, Manta Raksasa, dan Hiu Putih Raksasa memburu mangsa di tengah badai.',
+  pool:{common:['kakap','layang','baronang','selar'],rare:['barakuda','tuna','kerapu','todak'],epic:['hiu','pedang','elang','pari_listrik'],legend:['marlin','abyss','hiuputih']}},
  {n:'Laguna Tropis',e:'🏝️',ac:'#62d0d8',lg:1.6,
   txt:'Laguna hangat berpasir putih. Ikan hias dan ikan karang langka bersembunyi di terumbu.',
   lgTxt:'Arwana Emas dan Opah Raja bersembunyi di dasar laguna.',
-  pool:{common:['badut','kepe','baronang','kembung'],rare:['singa','mandarin','napoleon','buntal'],epic:['angel','idol','handfish'],legend:['naga','opah']}},
+  pool:{common:['badut','kepe','baronang','kembung','ekorkuning'],rare:['singa','mandarin','napoleon','buntal','lencam'],epic:['angel','idol','handfish'],legend:['naga','opah']}},
  {n:'Teluk Neon Cyber',e:'🪩',ac:'#ff7fe0',lg:2.4,
   txt:'Teluk futuristik bermandi lampu neon. Hewan berpendar yang jarang ada di tempat lain berkumpul di sini.',
   lgTxt:'Ubur-ubur Kristal dan Opah Raja berpendar di antara lampu neon.',
-  pool:{common:['teri','kepe','badut'],rare:['ubur','mandarin','singa'],epic:['ubur_api','lentera','idol'],legend:['ubur_kristal','opah']}},
+  pool:{common:['teri','kepe','badut'],rare:['ubur','mandarin','singa'],epic:['ubur_api','lentera','idol','uburneon'],legend:['ubur_kristal','opah']}},
  {n:'Pulau Gunung Api',e:'🌋',ac:'#ff9a50',lg:3.0,
   txt:'Pulau gunung berapi dengan air hangat yang bergolak. Berbahaya, tapi inilah tempat paling dicari para pemburu legenda.',
   lgTxt:'Peluang legendaris tertinggi. Arwana Emas dan Marlin Biru sering muncul.',
-  pool:{common:['kakap','baronang','layang'],rare:['kerapu','barakuda','buntal'],epic:['hiu','ubur_api','pedang'],legend:['naga','marlin']}}
+  pool:{common:['kakap','baronang','layang'],rare:['kerapu','barakuda','buntal','kuwe'],epic:['hiu','ubur_api','pedang','hiumacan'],legend:['naga','marlin']}}
 ];
 let ISLE_CUR=0,isleGo=null;
 function weightsFor(z,inSpot,ii){
@@ -1831,10 +1839,23 @@ function startFight(){
   const d=G.fishDef,fp=FP[d.rar],ri=RAR.indexOf(d.rar);
   const size=clamp(.25+resLv()*.025-ri*.025,.2,.5);
   G.jumpCd=rand(2,4);G.jumpT=-1;
-  G.f={fp,size,zone:0,zv:0,fish:.5,fv:0,target:.5,tt:.6,prog:.3,inside:false,reelClick:0,t:0};
+  G.f={fp,size,zone:0,zv:0,fish:.5,fv:0,target:.5,tt:.6,prog:.3,inside:false,reelClick:0,t:0,side:0,sideT:0,sideCd:rand(2,3.2),sideWin:clamp(1.6-ri*.15,1,2)};G.pullX=0;setPullUI(0);
   G.state='fight';G.tens=.5;G.reelT=0;G.land.copy(bobber.position);G.bobBase.copy(bobber.position);
   $('fight').hidden=false;$('ftFish').innerHTML=fishSVG(d,true);
   $('ftZone').style.height=size*100+'%';SFX.splash(false);vib(30);
+}
+/* ===== Tarikan samping: ikan menarik joran ke kiri / kanan, tekan panah sesuai arah (atau tombol ← →) ===== */
+function setPullUI(side){const l=$('pullL'),r=$('pullR');if(!l||!r)return;l.classList.toggle('on',side<0);r.classList.toggle('on',side>0);}
+const pullCd=()=>Math.max(1.4,rand(2.2,4.2)-RAR.indexOf(G.fishDef.rar)*.3);
+function pullPress(dir){
+  if(G.state!=='fight'||!G.f||!liveLenient())return;
+  const F=G.f;if(F.side===0)return;
+  if(dir===F.side){
+    F.prog=clamp(F.prog+.07,0,1);G.pullX=-F.side*1.1;F.side=0;F.sideCd=pullCd();setPullUI(0);
+    G.tens=Math.min(G.tens,.5);G.shake=Math.max(G.shake,.03);tone(660,.12,'triangle',.1);splashFx(G.bobBase.x,G.bobBase.z,8,.6);vib(20);
+  }else{
+    F.prog=clamp(F.prog-.03,0,1);G.shake=Math.max(G.shake,.04);tone(200,.1,'square',.08);vib(40);
+  }
 }
 function updateFight(dt){
   const F=G.f,fp=F.fp;F.t+=dt;
@@ -1843,6 +1864,11 @@ function updateFight(dt){
   const dir=F.target-F.fish,want=Math.sign(dir)*Math.min(Math.abs(dir)*2.5,fp.speed);
   F.fv=lerp(F.fv,want,Math.min(1,dt*4));F.fish=clamp(F.fish+F.fv*dt,.04,.96);
   const hold=G.pressed;
+  if(liveLenient()){
+    if(F.side===0){F.sideCd-=dt;if(F.sideCd<=0&&F.prog>.12&&F.prog<.92){F.side=Math.random()<.5?-1:1;F.sideT=F.sideWin;setPullUI(F.side);SFX.splash(false);vib(25);G.shake=Math.max(G.shake,.03);}}
+    else{F.sideT-=dt;if(F.sideT<=0){F.prog=clamp(F.prog-.08,0,1);G.tens=1;G.shake=Math.max(G.shake,.06);tone(180,.15,'square',.08);vib(60);F.side=0;F.sideCd=pullCd();setPullUI(0);}}
+  }else if(F.side!==0){F.side=0;setPullUI(0);}
+  G.pullX=lerp(G.pullX,F.side*1.8,Math.min(1,dt*(F.side?6:3.5)));
   F.zv+=(hold?2.3:-2.1)*dt;F.zv*=1-1.4*dt;F.zv=clamp(F.zv,-1.4,1.6);F.zone+=F.zv*dt;
   const maxZ=1-F.size;
   if(F.zone<0){F.zone=0;F.zv=-F.zv*.3;}
@@ -2396,6 +2422,8 @@ window.addEventListener('pointerup',pressUp);window.addEventListener('pointercan
 window.addEventListener('pointermove',moveAim);
 window.addEventListener('keydown',e=>{if(e.code==='Space'&&!e.repeat){e.preventDefault();pressDown(null);}});
 window.addEventListener('keyup',e=>{if(e.code==='Space')pressUp();});
+['pullL','pullR'].forEach((id,i)=>{const b=$(id),dir=i?1:-1;b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();pullPress(dir);});['pointerup','pointercancel'].forEach(ev=>b.addEventListener(ev,e=>e.stopPropagation()));});
+window.addEventListener('keydown',e=>{if(G.state!=='fight')return;const tg=e.target&&e.target.tagName;if(tg==='INPUT'||tg==='TEXTAREA')return;const d=(e.code==='ArrowLeft'||e.code==='KeyA')?-1:(e.code==='ArrowRight'||e.code==='KeyD')?1:0;if(d&&!e.repeat){e.preventDefault();pullPress(d);}});
 $('bMus').addEventListener('click',e=>{A.musicOn=!A.musicOn;e.currentTarget.setAttribute('aria-pressed',A.musicOn);if(A.mus)A.mus.gain.value=A.musicOn?.5:0;if(A.ctx&&A.musicOn){A.nextChord=A.ctx.currentTime+.1;A.nextArp=A.ctx.currentTime+.1;}});
 $('bSfx').addEventListener('click',e=>{A.sfxOn=!A.sfxOn;e.currentTarget.setAttribute('aria-pressed',A.sfxOn);if(A.sfx)A.sfx.gain.value=A.sfxOn?1:0;});
 $('startBtn').addEventListener('click',()=>{if(!MODE.ready)return;audioInit();G.started=true;$('start').hidden=true;refreshAct();SFX.tap();});
@@ -2513,6 +2541,7 @@ function frame(now){
 function updateWorld(t,dt){
   const s=G.state;
   if(s!==shown){shown=s;refreshAct();}
+  {const pv=s==='fight'&&liveLenient();if(pv!==G._pv){G._pv=pv;$('pullBtns').hidden=!pv;if(!pv)setPullUI(0);}}
   /* umpan gratis */
   if(G.started&&S.baits.worm<5){baitTimer-=dt;if(baitTimer<=0){S.baits.worm++;baitTimer=40;toast('+1 umpan dari angin laut');updateHud();save();}}else baitTimer=40;
   let tension=.2,pitch=.3+Math.sin(t*.8)*.01,bx=0,bz=-10,tb=0,ts=0,spin=0;
@@ -2549,7 +2578,7 @@ function updateWorld(t,dt){
   }
   if(s==='fight'){
     updateFight(dt);if(G.state==='fight'){const F=G.f,b=G.bobBase;
-    bobber.position.set(b.x+Math.sin(t*9)*.22*G.tens,Math.sin(t*14)*.06-.08,b.z+Math.cos(t*7)*.18);
+    bobber.position.set(b.x+G.pullX+Math.sin(t*9)*.22*G.tens,Math.sin(t*14)*.06-.08,b.z+Math.cos(t*7)*.18);
     G.ang+=dt*(1.5+Math.abs(F.fv)*3);
     const H=G.H,fpar=F.fp;let r=1.3;
     G.jumpCd-=dt;
@@ -2560,9 +2589,9 @@ function updateWorld(t,dt){
       if(ju>=1){G.jumpT=-1;SFX.splash(true);splashFx(b.x,b.z,26,1.3);addRipple(b.x,b.z,.5);ringAt(b.x,b.z,4);G.shake=.05;}
     }
     const c=Math.cos(G.ang),sn=Math.sin(G.ang);
-    H.position.set(b.x+c*r,hy,b.z+sn*r);H.rotation.set(0,Math.atan2(-c,-sn),0);H.rotation.x=roll;H.rotation.z=pt;animateFish(H,t,G.jumpT>=0?9:5+Math.abs(F.fv)*3);
-    pitch=.62+G.tens*.15+Math.sin(t*18)*.03*G.tens;tension=G.tens;bx=b.x;bz=b.z;spin=G.pressed?16:0;
-    tb=-(.3+G.tens*.55+Math.abs(F.fv)*.2);ts=-clamp((b.x-rod.position.x)*.05,-.3,.3)-Math.sin(t*5.3)*.05*G.tens;
+    H.position.set(b.x+G.pullX+c*r,hy,b.z+sn*r);H.rotation.set(0,Math.atan2(-c,-sn),0);H.rotation.x=roll;H.rotation.z=pt;animateFish(H,t,G.jumpT>=0?9:5+Math.abs(F.fv)*3);
+    pitch=.62+G.tens*.15+Math.sin(t*18)*.03*G.tens;tension=G.tens;bx=b.x+G.pullX*1.15;bz=b.z;spin=G.pressed?16:0;
+    tb=-(.3+G.tens*.55+Math.abs(F.fv)*.2);ts=-clamp((b.x-rod.position.x)*.05,-.3,.3)-Math.sin(t*5.3)*.05*G.tens-G.pullX*.22;
     G.shake=Math.max(G.shake,.015*G.tens);}
   }
   if(s==='retract'){
