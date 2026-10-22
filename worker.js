@@ -441,6 +441,7 @@ const COUNTDOWN_MS = 5000;
 const EMPTY_GRACE_MS = 90000;     // semua pemain putus saat pertandingan jalan: tunggu 90 dtk sebelum diselesaikan
 const PREP_MS = 30000; // waktu siap-siap duel (pilih joran & umpan) sebelum hitung mundur
 const TOUR_DUR = 180, TOUR_MAXP = 36; // playoff: duel 3 menit, peserta 2-36 (genap)
+const TOUR_SIZES = [2, 4, 8, 16, 32, 36]; // server selalu menyediakan satu turnamen terbuka untuk tiap kombinasi biaya x jumlah pemain
 const TOUR_FEES = [0, 1e6, 1e7, 1e8, 1e9, 1e10]; // biaya daftar dari server: gratis, 1M, 10M, 100M, 1B, 10B
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_RE = /^[A-Z2-9]{4}$/;
@@ -687,7 +688,13 @@ export class GameRoom {
     this.pushRoom(r);
   }
   // ---- TURNAMEN PLAYOFF (global, tanpa room): pilih biaya + jumlah pemain, otomatis mulai saat penuh ----
-  tList() { return [...this.TS.values()].map(T => this.tView(T)); }
+  tEnsure() { // selalu ada satu turnamen terbuka per kombinasi; yang sudah penuh/mulai otomatis diganti baru
+    for (const fee of TOUR_FEES) for (const size of TOUR_SIZES) {
+      if ([...this.TS.values()].some(x => x.phase === 'reg' && x.fee === fee && x.size === size)) continue;
+      const id = this.newMid(); this.TS.set(id, { id, phase: 'reg', dur: TOUR_DUR, fee, size, players: new Set(), rounds: [], champ: '', doneAt: 0, pts: {}, prize: null });
+    }
+  }
+  tList() { this.tEnsure(); return [...this.TS.values()].map(T => this.tView(T)); }
   tView(T) {
     return { id: T.id, phase: T.phase, fee: T.fee, size: T.size, dur: T.dur, champ: T.champ, players: [...T.players], pool: T.fee * T.players.size, prize: T.prize,
       rounds: T.rounds.map(rd => rd.map(m => ({ a: m.a, b: m.b, w: m.w, sa: m.sa, sb: m.sb, live: !!m.code && !m.w }))) };
@@ -698,11 +705,11 @@ export class GameRoom {
     const p = this.peers.get(ws); if (!p) return;
     const bad = t => this.send(ws, { type: 'error', message: t });
     const fee = Math.trunc(Number(m.fee) || 0), size = Math.trunc(Number(m.size) || 0);
-    if (!TOUR_FEES.includes(fee) || size < 2 || size > TOUR_MAXP || size % 2) return bad('Pilihan turnamen tidak valid.');
+    if (!TOUR_FEES.includes(fee) || !TOUR_SIZES.includes(size)) return bad('Pilihan turnamen tidak valid.');
     if (this.tOf(p.user)) return bad('Kamu sudah terdaftar di sebuah turnamen.');
     let T = [...this.TS.values()].find(x => x.phase === 'reg' && x.fee === fee && x.size === size);
     if (!T) { const id = this.newMid(); T = { id, phase: 'reg', dur: TOUR_DUR, fee, size, players: new Set(), rounds: [], champ: '', doneAt: 0, pts: {}, prize: null }; this.TS.set(id, T); }
-    const gone = () => { if (!T.players.size && this.TS.get(T.id) === T) this.TS.delete(T.id); };
+    const gone = () => {};
     if (fee > 0) {
       if (!(await this.charge(p.user, fee, T.id))) { gone(); return bad('Saldo tidak cukup untuk biaya pendaftaran. Pastikan koinmu sudah tersinkron ke server.'); }
       if (T.phase !== 'reg' || T.players.size >= size || !this.peers.has(ws) || this.tOf(p.user)) { await this.refund(T.id, p.user); gone(); return bad('Turnamen berubah saat mendaftar, biaya dikembalikan. Coba lagi.'); }
@@ -717,7 +724,6 @@ export class GameRoom {
     if (!T || T.phase !== 'reg') return;
     T.players.delete(p.user);
     if (T.fee > 0) this.refund(T.id, p.user).catch(e => console.error(e));
-    if (!T.players.size) this.TS.delete(T.id);
     this.tPush();
   }
   tMatch(a, b) { return { a, b, w: '', sa: 0, sb: 0, code: '', readyAt: Date.now() + 6000 }; }
@@ -794,7 +800,7 @@ export class GameRoom {
     for (const [w, p] of this.peers) if (p.user === user) { try { w.close(4000, 'replaced'); } catch {} this.drop(w); }
     this.peers.set(server, { user, room: '', st: 'lobi', tokens: 20, tAt: Date.now(), lastCatch: null, lastGlobal: 0 });
     this.send(server, { type: 'hello', user, online: this.online() });
-    if (this.TS.size) this.send(server, { type: 'tour', list: this.tList() });
+    this.send(server, { type: 'tour', list: this.tList() });
     this.broadcast({ type: 'online', n: this.online() }, server);
     server.addEventListener('close', () => this.drop(server));
     server.addEventListener('error', () => this.drop(server));

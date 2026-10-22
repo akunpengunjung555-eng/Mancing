@@ -1723,6 +1723,20 @@ const ZCOL=[0x7fe6f0,0x9cf08a,0xc77bff];
 const rodDef=()=>RODS.find(r=>r.id===S.rod)||RODS[0];
 const luckLv=()=>S.upg.luck+rodDef().luck+BAITS[S.baitSel].luck;
 window.__rig=()=>({bait:S.bait,bn:BAITS[S.baitSel].name,rod:rodDef().name});
+window.__rigCycle=kind=>{ /* ganti umpan / joran dengan satu ketukan (dipakai tombol di frame mabar & turnamen) */
+  if(!G.started){toast('Mulai memancing dulu.');return;}
+  if(G.state!=='idle'){toast('Tunggu pancingan selesai.');return;}
+  if(kind==='bait'){const ks=Object.keys(BAITS).filter(k=>(S.baits[k]||0)>0);if(!ks.length){toast('Umpan habis. Beli di Toko.');return;}S.baitSel=ks[(ks.indexOf(S.baitSel)+1)%ks.length];toast('Umpan: '+BAITS[S.baitSel].name);}
+  else{const ks=RODS.filter(r=>S.rods[r.id]);if(!ks.length)return;const r=ks[(ks.findIndex(x=>x.id===S.rod)+1)%ks.length];S.rod=r.id;buildRod(r);toast('Joran: '+r.name);}
+  try{SFX.tap();}catch(e){}updateHud();save();
+};
+window.__enterMatch=()=>{try{ /* pertandingan mulai: tutup menu, masuk ke layar memancing otomatis */
+  if(!MODE.ready)return;
+  if(sheetKind)closeSheet();
+  const md=$('modePick');if(md)md.hidden=true;
+  if(!G.started){const i=isleOpen(ISLE_CUR)?ISLE_CUR:0;closeHome();if(window.__isleSet)window.__isleSet(i);$('startBtn').click();}
+  else if(homeOpen)closeHome();
+}catch(e){}};
 const lureLv=()=>S.upg.lure+rodDef().lure+BAITS[S.baitSel].lure;
 const resLv=()=>S.upg.res+rodDef().res;
 const castDist=p=>7+p*17;
@@ -5130,6 +5144,7 @@ body:has(#app.clean) #mpFab{opacity:.12}
 #mpRes button{width:100%;margin-top:12px;min-height:40px;border-radius:10px;border:0;background:#ffc93c;color:#2a1a00;font:800 14px system-ui,sans-serif;cursor:pointer}
 #mpPanel .br{display:flex;gap:8px;overflow-x:auto;margin-top:8px;padding-bottom:4px}#mpPanel .br .rd{display:flex;flex-direction:column;justify-content:space-around;gap:6px;min-width:104px}#mpPanel .br h5{margin:0 0 2px;font-size:10px;letter-spacing:.08em;color:#7fe3e6;text-transform:uppercase;text-align:center}#mpPanel .br .mt{border:1px solid #2b8495;border-radius:8px;background:#0c2a3a;font-size:11px;overflow:hidden}#mpPanel .br .mt.live{border-color:#3ddc84}#mpPanel .br .mt div{display:flex;justify-content:space-between;gap:6px;padding:3px 6px}#mpPanel .br .mt div.w{color:#ffc93c;font-weight:800;background:#3a2a00}#mpPanel .br .mt div.me{outline:1px solid #ffc93c;outline-offset:-1px}
 #mpPrep{position:fixed;z-index:999991;left:50%;top:calc(env(safe-area-inset-top,0px) + 44px);transform:translateX(-50%);width:min(92vw,380px);box-sizing:border-box;padding:12px 14px;border-radius:16px;background:rgba(4,16,26,.92);border:2px solid #ffc93c;color:#fff;text-align:center;font:700 13px system-ui,sans-serif;pointer-events:none;box-shadow:0 0 30px rgba(255,201,60,.3)}#mpPrep[hidden]{display:none}#mpPrep .lb{font-size:11px;letter-spacing:.2em;color:#7fe3e6}#mpPrep .vs{font:900 22px/1.2 system-ui,sans-serif;color:#ffc93c;margin:2px 0}#mpPrep.in .vs{animation:mpVs .9s cubic-bezier(.2,1.4,.4,1) both}#mpPrep .num{font:900 40px/1.1 ui-monospace,monospace;margin:4px 0}#mpPrep .tx{color:#bfe6ee}#mpPrep .rig{margin-top:4px;color:#9fd3dc}#mpPrep .rig.w{color:#ff8a7a;font-weight:800}#mpPrep button{pointer-events:auto;margin-top:8px;min-height:36px;padding:0 14px;border-radius:10px;border:0;background:#ffc93c;color:#2a1a00;font:800 13px system-ui,sans-serif;cursor:pointer}@keyframes mpVs{0%{opacity:0;transform:scale(2.6)}100%{opacity:1;transform:none}}
+#mpPanel .tl{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}#mpPanel .tl button{flex:1 0 46%}#mpPanel h5.fh{margin:8px 0 3px;font-size:11px;letter-spacing:.08em;color:#7fe3e6;text-transform:uppercase}
 </style>
 <button id="mpFab" type="button" aria-label="Mabar &amp; notif global" title="Mabar &amp; notif global" data-s="off">👥<i></i><b hidden></b></button>
 <div id="socMenu" hidden><button type="button" id="socF">🤝 Teman</button><button type="button" id="socM">🎮 Mabar</button><button type="button" id="socT">🏆 Turnamen</button></div>
@@ -5154,7 +5169,7 @@ body:has(#app.clean) #mpFab{opacity:.12}
   <div class="log" id="mpGBoard">Ketuk salah satu tombol untuk memuat.</div>
 
   <h4>🏆 Turnamen Playoff</h4>
-  <div id="tourBox"><div class="st" id="tourSt">Pilih biaya dan jumlah pemain.</div><div id="tourPick"><span class="lbl">Biaya daftar</span><select id="tourFee"><option value="0">Gratis</option><option value="1000000">1M</option><option value="10000000">10M</option><option value="100000000">100M</option><option value="1000000000">1B</option><option value="10000000000">10B</option></select><span class="lbl">Jumlah pemain</span><select id="tourSize"></select></div><div class="row"><button class="b pri" id="tourJoin" type="button">🏆 Ikut turnamen</button></div><div class="br" id="tourBr"></div><small>Tanpa room: pilih biaya dan jumlah pemain, lalu ketuk ikut. Turnamen menunggu sampai penuh, lalu mulai otomatis. Gugur 1 lawan 1, duel 3 menit (seri = tambahan 60 detik). Juara dapat 50% total biaya, runner-up 20%. Hasil masuk papan global.</small></div>
+  <div id="tourBox"><div class="st" id="tourSt">Memuat daftar turnamen…</div><div id="tourList"></div><div class="row"><button class="b" id="tourJoin" type="button" hidden>🚪 Batal ikut</button></div><div class="br" id="tourBr"></div><small>Server selalu menyediakan turnamen terbuka. Ketuk salah satu untuk ikut, tunggu sampai penuh, lalu mulai otomatis. Gugur 1 lawan 1, duel 3 menit (seri = tambahan 60 detik). Juara dapat 50% total biaya, runner-up 20%. Hasil masuk papan global.</small></div>
 
   <h4>🎮 Mabar</h4>
   <div id="mpOut">
@@ -5283,7 +5298,9 @@ function route(m){
       if(gOn.checked)announce(it);
       break}
     case 'tour_need':feedAdd('ℹ️ Turnamen berbiaya '+fmtC(m.fee)+' koin. Ketuk Ikut turnamen lagi.');break;
-    case 'tour':S.tours=m.list||[];renderTour();break;
+    case 'tour':{const was=myTour();S.tours=m.list||[];const now=myTour();
+      if(was&&now&&was.id===now.id&&was.phase==='reg'&&now.phase==='run'){feedAdd('🏆 Turnamen dimulai! Bersiap.');chime('legend');open(false);if(window.__enterMatch)window.__enterMatch()}
+      renderTour();break}
     case 'room':S.room=m.room;if(m.room)m.room._rx=performance.now();if(!m.room){S.feed=[]}renderRoom();break;
     case 'room_status':{if(S.room){const x=S.room.members.find(y=>y.u===m.user);if(x){x.st=m.st;renderRoom()}}break}
     case 'room_event':roomEvent(m);break;
@@ -5491,7 +5508,7 @@ $('mpPrep').querySelector('button').addEventListener('click',()=>{const b=docume
 function autoFrame(){
   const r=S.room,ph=r?r.phase:'',k=r?r.code+'|'+ph:'';
   if(k===S.af)return;const was=S.afr;S.af=k;S.afr=r;
-  if(r&&(ph==='countdown'||ph==='running'))open(false);
+  if(r&&(ph==='countdown'||ph==='running')){open(false);if(window.__enterMatch)window.__enterMatch()}
   else if(r&&ph==='lobby'&&r.mode!=='duel')open(true);
   else if(r&&ph==='ended'&&r.mode!=='duel')setTimeout(()=>{if(S.room&&S.room.phase==='ended')open(true)},10500);
   else if(!r&&was&&was.mode==='duel'&&(S.tours||[]).some(t=>t.phase!=='reg'&&t.players.includes(S.me)))setTimeout(()=>{open(true);const e=$('tourBox');if(e)e.scrollIntoView({block:'start'})},300);
@@ -5625,16 +5642,22 @@ $('mpChat').addEventListener('submit',e=>{
 /* ---------- aksi ---------- */
 const need=()=>{if(S.ws&&S.ws.readyState===1)return true;setText($('mpStatus'),'Belum tersambung ke server.');return false};
 /* ---------- TURNAMEN PLAYOFF: tanpa room, semua online boleh ikut, bagan 1 lawan 1 ---------- */
-(()=>{const s=$('tourSize');for(let n=2;n<=36;n+=2){const o=document.createElement('option');o.value=n;o.textContent=n+' pemain';s.append(o)}s.value='8'})();
-function curTour(){const l=S.tours||[],me=l.filter(t=>t.players.includes(S.me));return me.find(t=>t.phase!=='done')||me[0]||l.find(t=>t.phase==='reg'&&String(t.fee)===$('tourFee').value&&String(t.size)===$('tourSize').value)||null}
+function myTour(){const me=(S.tours||[]).filter(t=>t.players.includes(S.me));return me.find(t=>t.phase!=='done')||me[0]||null}
 function renderTour(){
-  const st=$('tourSt');if(!st)return;const t=curTour(),br=$('tourBr'),jb=$('tourJoin');br.textContent='';
-  const inT=!!t&&t.phase!=='done'&&t.players.includes(S.me),reg=!!t&&t.phase==='reg';
-  $('tourPick').hidden=inT;jb.hidden=inT&&!reg;jb.textContent=inT?'🚪 Batal ikut':'🏆 Ikut turnamen';
-  if(!t)st.textContent='Belum ada yang mendaftar di pilihan ini. Ketuk ikut, lalu tunggu pemain lain.';
+  const st=$('tourSt');if(!st)return;const t=myTour(),br=$('tourBr'),jb=$('tourJoin'),ls=$('tourList'),all=S.tours||[];br.textContent='';ls.textContent='';
+  const inT=!!t&&t.phase!=='done',reg=!!t&&t.phase==='reg';jb.hidden=!reg;
+  if(!t){const run=all.filter(x=>x.phase==='run').length;st.textContent='Ketuk salah satu turnamen di bawah untuk ikut.'+(run?' ('+run+' turnamen sedang berjalan)':'')}
   else if(reg)st.textContent='Menunggu pemain '+t.players.length+'/'+t.size+' · '+(t.fee>0?'biaya '+fmtC(t.fee)+' · pool '+fmtC(t.pool):'gratis')+' · mulai otomatis saat penuh';
-  else if(t.phase==='run')st.textContent='Turnamen berjalan ('+t.size+' pemain)'+(inT?' · semoga menang!':' · kamu menonton');
+  else if(t.phase==='run')st.textContent='Turnamen berjalan ('+t.size+' pemain) · semoga menang!';
   else st.textContent='👑 Juara: @'+t.champ+(t.champ===S.me?' (kamu!)':'')+(t.prize&&t.prize[t.champ]?' · hadiah '+fmtC(t.prize[t.champ]):'');
+  if(!inT){
+    [...new Set(all.filter(x=>x.phase==='reg').map(x=>x.fee))].sort((a,b)=>a-b).forEach(f=>{
+      const h=document.createElement('h5');h.className='fh';h.textContent=f>0?'Biaya '+fmtC(f):'Gratis';ls.append(h);
+      const row=document.createElement('div');row.className='tl';
+      all.filter(x=>x.phase==='reg'&&x.fee===f).sort((a,b)=>a.size-b.size).forEach(x=>{
+        const b=document.createElement('button');b.type='button';b.className='b';b.dataset.f=f;b.dataset.s=x.size;b.textContent=x.size+' pemain · '+x.players.length+'/'+x.size;row.append(b)});
+      ls.append(row)});
+  }
   if(!t||!t.rounds.length)return;
   const n=t.rounds.length;
   t.rounds.forEach((rd,i)=>{
@@ -5651,11 +5674,10 @@ function renderTour(){
     br.append(c);
   });
 }
-$('tourFee').addEventListener('change',renderTour);$('tourSize').addEventListener('change',renderTour);
-$('tourJoin').addEventListener('click',async()=>{if(!need())return;const t=curTour();if(t&&t.phase==='reg'&&t.players.includes(S.me))return send({type:'t_leave'});
-  const fee=Number($('tourFee').value)||0,size=Number($('tourSize').value)||2;
+$('tourList').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b||!need())return;const fee=+b.dataset.f,size=+b.dataset.s;
   if(fee>0&&!confirm('Bayar '+fmtC(fee)+' koin untuk ikut turnamen '+size+' pemain? Juara dapat 50% total biaya, runner-up 20%.'))return;
   await pushWallet();send({type:'t_join',fee,size})});
+$('tourJoin').addEventListener('click',()=>{if(need())send({type:'t_leave'})});
 window.__mpMode=k=>{if(k==='solo')return;open(true);const e=$(k==='tour'?'tourBox':'mpOut');if(e)setTimeout(()=>e.scrollIntoView({block:'start'}),60)};
 $('mpCreate').addEventListener('click',doCreate);
 $('mpJoin').addEventListener('click',()=>{const c=$('mpCodeIn').value.trim().toUpperCase();if(c.length!==4){setText($('mpStatus'),'Kode room 4 karakter.');return}if(need())joinCode(c)});
@@ -5715,12 +5737,17 @@ function spLayout(n){const ap=document.getElementById('app'),W=(ap&&ap.clientWid
 function spOrder(){const m=(S.room&&S.room.members)||[];return [S.me,...m.map(x=>x.u).filter(u=>u!==S.me)].slice(0,6)}
 function rvView(m){if(!m||!m.v)return;let o=SP.V.get(m.u);if(!o){o={t:0,c:{x:0,d:0,fi:.5,zo:0,sz:.3,pr:.3,te:.5,pw:0},g:m.v,s:'idle',fn:'',fr:'',p:0};SP.V.set(m.u,o)}o.g=m.v;o.t=performance.now();o.s=m.v.s;o.fn=m.v.fn;o.fr=m.v.fr;o.fk=m.v.fk||'';o.rd=m.v.rd||'';o.p=m.v.p}
 function applySplit(){
-  const users=spOrder(),n=(S.room&&S.room.members.length)||0,ok=SP.on&&S.room&&n>=2&&S.me,app=$('app');
-  if(!ok){if(app)app.classList.remove('split');if(SP.ov){SP.ov.remove();SP.ov=null;SP.mc=null;SP.mcx=null;SP.tiles.clear()}if(window.mancingSplitSet)window.mancingSplitSet(null);cancelAnimationFrame(SP.raf);SP.raf=0;SP.n=0;return}
+  const users=spOrder(),n=(S.room&&S.room.members.length)||0,ok=(SP.on||(S.room&&S.room.mode==='duel'))&&S.room&&n>=2&&S.me,app=$('app');
+  if(!ok){{const g=document.getElementById('mpRig');if(g)g.remove()}if(app)app.classList.remove('split');if(SP.ov){SP.ov.remove();SP.ov=null;SP.mc=null;SP.mcx=null;SP.tiles.clear()}if(window.mancingSplitSet)window.mancingSplitSet(null);cancelAnimationFrame(SP.raf);SP.raf=0;SP.n=0;return}
   if(!SP.ov){SP.ov=document.createElement('div');SP.ov.id='mpSplit';SP.gl.after(SP.ov)}
   const L=spLayout(users.length);SP.n=users.length;if(app){app.classList.add('split');app.style.setProperty('--sw',L.w+'px');app.style.setProperty('--sh',L.h+'px')}
   let me=SP.ov.querySelector('.me');if(!me){me=document.createElement('div');me.className='me';SP.ov.append(me)}
   Object.assign(me.style,{left:'0px',top:'0px',width:L.w+'px',height:L.h+'px'});{const bm=S.room&&(S.room.board||[]).find(x=>x.u===S.me);me.textContent='🎣 Kamu (@'+S.me+')'+(bm?' · '+bm.pts+' poin':'')}
+  {let rg=document.getElementById('mpRig');
+   if(!rg){rg=document.createElement('div');rg.id='mpRig';
+     [['rod','🎣'],['bait','🪱']].forEach(([k,ic])=>{const b=document.createElement('button');b.type='button';b.dataset.k=k;b.innerHTML='<i>'+ic+'</i><span></span>';b.addEventListener('click',()=>{if(window.__rigCycle)window.__rigCycle(k);paintRg();b.blur()});rg.append(b)});
+     ['pointerdown','pointerup','touchstart','keydown','keyup'].forEach(t=>rg.addEventListener(t,ev=>ev.stopPropagation()));document.body.append(rg)}
+   const R=app?app.getBoundingClientRect():{left:0,top:0};Object.assign(rg.style,{left:Math.round(R.left+6)+'px',top:Math.round(R.top+L.h/2-46)+'px'});paintRg()}
   let mc=SP.ov.querySelector('.mc');if(!mc){mc=document.createElement('canvas');mc.className='mc';SP.ov.append(mc);SP.mc=mc;SP.mcx=mc.getContext('2d')}
   mc.width=Math.max(120,Math.round(L.w));mc.height=Math.max(90,Math.round(L.h));mc.style.width=L.w+'px';mc.style.height=L.h+'px';
   const keep=new Set();
@@ -5733,6 +5760,9 @@ function applySplit(){
   if(!SP.raf)SP.raf=requestAnimationFrame(spLoop);
 }
 addEventListener('resize',()=>{if(SP.ov)applySplit()});
+(function(){const c=document.createElement('style');c.textContent='#mpRig{position:fixed;z-index:999989;display:flex;flex-direction:column;gap:6px}#mpRig button{display:flex;align-items:center;gap:6px;max-width:136px;min-height:38px;padding:0 10px 0 8px;border-radius:19px;border:1.5px solid #2b8495;background:rgba(3,23,34,.85);color:#e9fbff;font:700 11px system-ui,sans-serif;cursor:pointer}#mpRig button i{font-style:normal;font-size:17px}#mpRig button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#mpRig button.w{border-color:#ff6b5e;color:#ff9a8a}';document.head.appendChild(c)})();
+function paintRg(){const rg=document.getElementById('mpRig'),r=window.__rig&&window.__rig();if(!rg||!r)return;const a=rg.children[0],b=rg.children[1];a.querySelector('span').textContent=r.rod;b.querySelector('span').textContent=r.bn+' ×'+r.bait;b.classList.toggle('w',r.bait<10)}
+setInterval(paintRg,500);
 function spLoop(now){
   SP.raf=requestAnimationFrame(spLoop);
   if(now-SP.lastT<33)return;const dt=Math.min(.1,(now-SP.lastT)/1000);SP.lastT=now;
