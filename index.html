@@ -1722,6 +1722,7 @@ aimRing.rotation.x=-Math.PI/2;aimRing.visible=false;aimRing.renderOrder=3;scene.
 const ZCOL=[0x7fe6f0,0x9cf08a,0xc77bff];
 const rodDef=()=>RODS.find(r=>r.id===S.rod)||RODS[0];
 const luckLv=()=>S.upg.luck+rodDef().luck+BAITS[S.baitSel].luck;
+window.__rig=()=>({bait:S.bait,bn:BAITS[S.baitSel].name,rod:rodDef().name});
 const lureLv=()=>S.upg.lure+rodDef().lure+BAITS[S.baitSel].lure;
 const resLv=()=>S.upg.res+rodDef().res;
 const castDist=p=>7+p*17;
@@ -5128,11 +5129,13 @@ body:has(#app.clean) #mpFab{opacity:.12}
 #mpRes .rk .p{width:26px;text-align:center;font-weight:800;color:#ffc93c}#mpRes .rk .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#mpRes .rk .v{font-weight:800;white-space:nowrap}
 #mpRes button{width:100%;margin-top:12px;min-height:40px;border-radius:10px;border:0;background:#ffc93c;color:#2a1a00;font:800 14px system-ui,sans-serif;cursor:pointer}
 #mpPanel .br{display:flex;gap:8px;overflow-x:auto;margin-top:8px;padding-bottom:4px}#mpPanel .br .rd{display:flex;flex-direction:column;justify-content:space-around;gap:6px;min-width:104px}#mpPanel .br h5{margin:0 0 2px;font-size:10px;letter-spacing:.08em;color:#7fe3e6;text-transform:uppercase;text-align:center}#mpPanel .br .mt{border:1px solid #2b8495;border-radius:8px;background:#0c2a3a;font-size:11px;overflow:hidden}#mpPanel .br .mt.live{border-color:#3ddc84}#mpPanel .br .mt div{display:flex;justify-content:space-between;gap:6px;padding:3px 6px}#mpPanel .br .mt div.w{color:#ffc93c;font-weight:800;background:#3a2a00}#mpPanel .br .mt div.me{outline:1px solid #ffc93c;outline-offset:-1px}
+#mpPrep{position:fixed;z-index:999991;left:50%;top:calc(env(safe-area-inset-top,0px) + 44px);transform:translateX(-50%);width:min(92vw,380px);box-sizing:border-box;padding:12px 14px;border-radius:16px;background:rgba(4,16,26,.92);border:2px solid #ffc93c;color:#fff;text-align:center;font:700 13px system-ui,sans-serif;pointer-events:none;box-shadow:0 0 30px rgba(255,201,60,.3)}#mpPrep[hidden]{display:none}#mpPrep .lb{font-size:11px;letter-spacing:.2em;color:#7fe3e6}#mpPrep .vs{font:900 22px/1.2 system-ui,sans-serif;color:#ffc93c;margin:2px 0}#mpPrep.in .vs{animation:mpVs .9s cubic-bezier(.2,1.4,.4,1) both}#mpPrep .num{font:900 40px/1.1 ui-monospace,monospace;margin:4px 0}#mpPrep .tx{color:#bfe6ee}#mpPrep .rig{margin-top:4px;color:#9fd3dc}#mpPrep .rig.w{color:#ff8a7a;font-weight:800}#mpPrep button{pointer-events:auto;margin-top:8px;min-height:36px;padding:0 14px;border-radius:10px;border:0;background:#ffc93c;color:#2a1a00;font:800 13px system-ui,sans-serif;cursor:pointer}@keyframes mpVs{0%{opacity:0;transform:scale(2.6)}100%{opacity:1;transform:none}}
 </style>
 <button id="mpFab" type="button" aria-label="Mabar &amp; notif global" title="Mabar &amp; notif global" data-s="off">👥<i></i><b hidden></b></button>
 <div id="socMenu" hidden><button type="button" id="socF">🤝 Teman</button><button type="button" id="socM">🎮 Mabar</button><button type="button" id="socT">🏆 Turnamen</button></div>
 <div id="mpBan" aria-live="polite"></div>
 <div id="mpEmo"></div>
+<div id="mpPrep" hidden><div class="lb"></div><div class="vs"></div><div class="num"></div><div class="tx"></div><div class="rig"></div><button type="button">🎒 Atur joran &amp; umpan</button></div>
 <div id="mpHud" hidden></div>
 <div id="mpRes" hidden><div class="card"><h3 id="mpResT">🏁 Selesai</h3><div class="sub" id="mpResS"></div><div id="mpResW"></div><div id="mpResL"></div><button type="button" id="mpResX">Tutup</button></div></div>
 <div id="mpInv" hidden><div id="mpInvT"></div><div class="row"><button type="button" id="mpInvNo">Tolak</button><button type="button" class="y" id="mpInvYes">Gabung</button></div></div>
@@ -5460,7 +5463,41 @@ function infoText(r){
   t+='\n'+(r.mode==='tourney'?'Hasil masuk papan peringkat global.':'Hasil hanya berlaku di room ini.');
   return t;
 }
+
+/* ---------- OTOMATIS: animasi awal + waktu siap-siap + frame terbuka/tertutup diatur server ---------- */
+function paintPrep(){
+  const r=S.room,el=$('mpPrep');if(!el)return;
+  const rig=window.__rig?window.__rig():null,q=s=>el.querySelector(s);
+  if(r&&r.phase==='running'){
+    if(rig&&rig.bait<=5){q('.lb').textContent='';q('.vs').textContent='';q('.num').textContent='⚠️ Umpan tinggal '+rig.bait;q('.tx').textContent='Beli atau ganti umpan di Toko!';q('.rig').textContent='';q('button').hidden=true;el.classList.remove('in');el.hidden=false}
+    else el.hidden=true;
+    S.prepK='';return}
+  if(!r||r.phase!=='countdown'){el.hidden=true;S.prepK='';return}
+  const sh=$('sheetWrap'),sec=Math.ceil(curLeft(r)/1000);
+  if(sec<=5&&sh&&!sh.hidden){const c=$('sheetClose');if(c)c.click()}
+  if(sec>5&&sh&&!sh.hidden){el.hidden=true;return}
+  el.hidden=false;
+  if(S.prepK!==r.code){S.prepK=r.code;el.classList.remove('in');void el.offsetWidth;el.classList.add('in');chime('legend')}
+  const duel=r.mode==='duel',names=(r.board||[]).map(x=>'@'+x.u);
+  q('.lb').textContent=duel?(r.lbl||'PLAYOFF'):'MABAR';
+  q('.vs').textContent=duel&&names.length===2?names[0]+' ⚔️ '+names[1]:'🏁 Pertandingan dimulai';
+  q('.num').textContent=sec>5?'⏳ '+sec:String(sec);
+  q('.tx').textContent=sec>5?'Siapkan joran & umpan sekarang!':'Bersiap melempar kail…';
+  const wn=!!rig&&rig.bait<25,rg=q('.rig');rg.className='rig'+(wn?' w':'');rg.textContent=rig?'🎣 '+rig.rod+' · 🪱 '+rig.bn+' ×'+rig.bait+(wn?' — umpan kurang! (butuh ±25)':''):'';
+  q('button').hidden=sec<=5;
+}
+$('mpPrep').querySelector('button').addEventListener('click',()=>{const b=document.querySelector('[data-sheet="shop"]');if(b)b.click()});
+['keydown','keyup','keypress','pointerdown'].forEach(t=>$('mpPrep').addEventListener(t,ev=>ev.stopPropagation()));
+function autoFrame(){
+  const r=S.room,ph=r?r.phase:'',k=r?r.code+'|'+ph:'';
+  if(k===S.af)return;const was=S.afr;S.af=k;S.afr=r;
+  if(r&&(ph==='countdown'||ph==='running'))open(false);
+  else if(r&&ph==='lobby'&&r.mode!=='duel')open(true);
+  else if(r&&ph==='ended'&&r.mode!=='duel')setTimeout(()=>{if(S.room&&S.room.phase==='ended')open(true)},10500);
+  else if(!r&&was&&was.mode==='duel'&&(S.tours||[]).some(t=>t.phase!=='reg'&&t.players.includes(S.me)))setTimeout(()=>{open(true);const e=$('tourBox');if(e)e.scrollIntoView({block:'start'})},300);
+}
 function tickUi(){
+  paintPrep();
   const r=S.room,hud=$('mpHud');
   if(!r||(r.phase!=='countdown'&&r.phase!=='running')){hud.hidden=true;if(r&&r.phase==='lobby')paintInfo();return}
   paintInfo();
@@ -5481,7 +5518,7 @@ function paintInfo(){
   el.append(st,head);
 }
 function renderRoom(){
-  const r=S.room;$('mpOut').hidden=!!r;$('mpIn').hidden=!r;applySplit();vcSync();
+  const r=S.room;autoFrame();$('mpOut').hidden=!!r;$('mpIn').hidden=!r;applySplit();vcSync();
   fab.firstChild.textContent=r?'🎮':'👥';
   if(!r){$('mpHud').hidden=true;return}
   setText($('mpCode'),r.code);
@@ -5533,7 +5570,7 @@ function showResults(res,quiet){
   });
   const foot=document.createElement('div');foot.className='sub';foot.style.marginTop='8px';
   foot.textContent=res.global?'Hasil tercatat di papan peringkat global.':'Hasil ini hanya berlaku di room ini (tidak masuk papan global).';l.append(foot);
-  $('mpRes').hidden=false;
+  $('mpRes').hidden=false;clearTimeout(S.rt);S.rt=setTimeout(()=>{$('mpRes').hidden=true},res.mode==='duel'?6000:10000);
   if(window.mancingSync)window.mancingSync();
 }
 $('mpResX').addEventListener('click',()=>{$('mpRes').hidden=true});

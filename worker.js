@@ -439,6 +439,7 @@ const MAX_FEE = 1_000_000_000_000; // 1T koin
 const PRIZE_PCT = 50;             // juara dapat 50% dari total biaya pendaftaran (sisanya hangus)
 const COUNTDOWN_MS = 5000;
 const EMPTY_GRACE_MS = 90000;     // semua pemain putus saat pertandingan jalan: tunggu 90 dtk sebelum diselesaikan
+const PREP_MS = 30000; // waktu siap-siap duel (pilih joran & umpan) sebelum hitung mundur
 const TOUR_DUR = 180, TOUR_MAXP = 36; // playoff: duel 3 menit, peserta 2-36 (genap)
 const TOUR_FEES = [0, 1e6, 1e7, 1e8, 1e9, 1e10]; // biaya daftar dari server: gratis, 1M, 10M, 100M, 1B, 10B
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -495,7 +496,7 @@ export class GameRoom {
   roomView(r) {
     const now = Date.now();
     return {
-      code: r.code, host: r.host, mode: r.mode, fee: r.fee, dur: r.dur, phase: r.phase,
+      code: r.code, host: r.host, mode: r.mode, fee: r.fee, dur: r.dur, phase: r.phase, lbl: r.lbl || '',
       pool: r.fee * r.entrants.size, pct: PRIZE_PCT,
       left: r.phase === 'countdown' ? Math.max(0, r.startAt - now) : r.phase === 'running' ? Math.max(0, r.endAt - now) : 0,
       board: this.board(r), results: r.phase === 'ended' ? r.results : null,
@@ -745,8 +746,9 @@ export class GameRoom {
     }
     const code = this.newCode(); if (!code) return;
     const r = this.makeRoom(code, m.a, 'duel', 0, T.dur); r.tm = { id: T.id, i, j }; this.rooms.set(code, r);
+    const nr = T.rounds.length; r.lbl = i === nr - 1 ? 'FINAL' : i === nr - 2 ? 'SEMIFINAL' : 'BABAK ' + (i + 1);
     for (const [ws, p] of [A, B]) { this.leaveRoom(ws, false); r.members.add(ws); p.room = code; r.entrants.set(p.user, true); r.scores.set(p.user, this.zero()); }
-    m.code = code; r.phase = 'countdown'; r.startAt = Date.now() + COUNTDOWN_MS; r.endAt = r.startAt + r.dur * 1000;
+    m.code = code; r.phase = 'countdown'; r.startAt = Date.now() + PREP_MS; r.endAt = r.startAt + r.dur * 1000;
     this.toRoom(r, { type: 'room_event', kind: 'start', by: 'turnamen' });
     this.pushRoom(r); this.tPush();
   }
