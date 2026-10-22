@@ -502,13 +502,13 @@ export class GameRoom {
     if (typeof ev.data !== 'string' || ev.data.length > 6000) return; // 'rtc' (SDP suara) butuh ruang lebih besar; pesan lain dibatasi 1500 di bawah
     const now = Date.now();
     // 'view' = status pancingan realtime untuk split-screen mabar; batas laju sendiri (maks ~11/detik), tidak memakan jatah pesan lain
-    if (ev.data.length < 420 && ev.data.startsWith('{"type":"view"')) {
+    if (ev.data.length < 480 && ev.data.startsWith('{"type":"view"')) {
       if (now - (p.vAt || 0) < 85) return; p.vAt = now;
       const r = p.room && this.rooms.get(p.room); if (!r || r.members.size < 2) return;
       let q; try { q = JSON.parse(ev.data); } catch { return; }
       const n = (v, a, b) => Math.max(a, Math.min(b, Math.round((Number(v) || 0) * 1000) / 1000));
       const s = cap(q.s, 12).toLowerCase();
-      const v = { s: /^[a-z]{1,12}$/.test(s) ? s : 'idle', x: n(q.x, -1, 1), d: n(q.d, 0, 1), fi: n(q.fi, 0, 1), zo: n(q.zo, 0, 1), sz: n(q.sz, 0, 1), pr: n(q.pr, 0, 1), te: n(q.te, 0, 1), pw: n(q.pw, 0, 1), p: q.p ? 1 : 0, fn: cap(q.fn, 40), fr: RAR_OK.has(q.fr) || q.fr === 'common' ? q.fr : '', fk: /^[a-z0-9_]{1,32}$/.test(String(q.fk || '')) ? q.fk : '' };
+      const v = { s: /^[a-z]{1,12}$/.test(s) ? s : 'idle', x: n(q.x, -1, 1), d: n(q.d, 0, 1), fi: n(q.fi, 0, 1), zo: n(q.zo, 0, 1), sz: n(q.sz, 0, 1), pr: n(q.pr, 0, 1), te: n(q.te, 0, 1), pw: n(q.pw, 0, 1), p: q.p ? 1 : 0, fn: cap(q.fn, 40), fr: RAR_OK.has(q.fr) || q.fr === 'common' ? q.fr : '', fk: /^[a-z0-9_]{1,32}$/.test(String(q.fk || '')) ? q.fk : '', rd: /^[a-z0-9_]{1,24}$/.test(String(q.rd || '')) ? q.rd : '' };
       this.toRoom(r, { type: 'view', u: p.user, v }, ws);
       return;
     }

@@ -2395,7 +2395,21 @@ function ffFish(fk){
   if(!m){const d=SPECIES.find(x=>x.id===fk)||SPECIES[0];try{m=makeFish(d,false)}catch(e){return null}m.visible=false;scene.add(m);FFC[fk||'_']=m}
   return m;
 }
+/* ===== joran teman: tampilkan joran PERSIS yang dia pakai (bukan joran kita) ===== */
+const RSN={};
+function rsSnap(){return{k:rod.children.slice(),segs:rodSegs,tip:rodTipNode,spin:rodReelSpin,w:rodWeights,an:rodAnim,rot:rodRotor,cur:curRod,tb:tipBaitG,bt:baitTip,len:rod.userData.len}}
+function rsLoad(q){while(rod.children.length)rod.remove(rod.children[0]);q.k.forEach(c=>rod.add(c));rodSegs=q.segs;rodTipNode=q.tip;rodReelSpin=q.spin;rodWeights=q.w;rodAnim=q.an;rodRotor=q.rot;curRod=q.cur;tipBaitG=q.tb;baitTip=q.bt;rod.userData.len=q.len}
+function rodUse(def){
+  if(!def||curRod.id===def.id)return;
+  RSN[curRod.id]=rsSnap();
+  const c=RSN[def.id];
+  if(c)rsLoad(c);else buildRod(def);
+}
 function renderFriend(o){
+  const myRod=curRod,frRod=o.rd&&RODS.find(x=>x.id===o.rd);
+  try{rodUse(frRod);renderFriend0(o);}finally{rodUse(myRod);}
+}
+function renderFriend0(o){
   const s=o.s,v=o.c,tt=performance.now()/1000,stale=!o.g||(performance.now()-o.t>3000);
   const bpx=v.x*12,bpz=2.4-v.d*24;
   const act=!stale&&['casting','waiting','bite','fight','retract'].includes(s);
@@ -2413,6 +2427,9 @@ function renderFriend(o){
   bobber.visible=act;bobber.position.set(bpx,y,bpz);line.visible=act;aimRing.visible=false;
   if(tipBaitG)tipBaitG.visible=false;
   if(G.H)G.H.visible=false;
+  {const fx=curRod.flex||1,bb=(s==='fight'?-(.3+v.te*.55):s==='bite'?-.3:s==='landing'?-.4:s==='waiting'?-.04:s==='retract'?-.2:0)*fx;
+   for(let i=0;i<rodSegs.length;i++){rodSegs[i].rotation.x=bb*rodWeights[i];rodSegs[i].rotation.y=0;}
+   for(let i=0;i<rodAnim.length;i++){try{rodAnim[i](tt,.033)}catch(e){}}}
   rod.updateMatrixWorld(true);
   if(act)updateLine(tension,rodTipWorld().distanceTo(bobber.position));
   let fm=null;
@@ -3885,7 +3902,7 @@ setTimeout(()=>{if(MODE.server&&MODE.ready)frLoad();},6000);
 let liveActionAt=0;
 window.mancingLiveState=()=>({ready:!!MODE.ready,started:!!G.started,ui:!!G.ui,state:G.state,ap:!!(document.getElementById('apOn')||{}).checked});
 window.mancingView=()=>{const F=G.f,s=G.started?G.state:'lobi',r=v=>Math.round(v*1000)/1000,c=(v,a,b)=>Math.max(a,Math.min(b,v)),bp=bobber.position,fo=F&&s==='fight',lf=(s==='landing'||s==='reveal')&&G.fishDef;
-  return {s,x:r(c(bp.x/12,-1,1)),d:r(c((2.4-bp.z)/24,0,1)),fi:fo?r(F.fish):0,zo:fo?r(F.zone):0,sz:fo?r(F.size):0,pr:fo?r(F.prog):0,te:r(c(G.tens||0,0,1)),pw:r(c(G.power||0,0,1)),p:G.pressed?1:0,fn:lf?String(G.fishDef.name||''):'',fr:lf?String(G.fishDef.rar||''):'',fk:(s==='waiting'||s==='bite'||s==='fight'||s==='landing'||s==='reveal')&&G.fishDef?String(G.fishDef.id||''):''}};
+  return {s,rd:S.rod,x:r(c(bp.x/12,-1,1)),d:r(c((2.4-bp.z)/24,0,1)),fi:fo?r(F.fish):0,zo:fo?r(F.zone):0,sz:fo?r(F.size):0,pr:fo?r(F.prog):0,te:r(c(G.tens||0,0,1)),pw:r(c(G.power||0,0,1)),p:G.pressed?1:0,fn:lf?String(G.fishDef.name||''):'',fr:lf?String(G.fishDef.rar||''):'',fk:(s==='waiting'||s==='bite'||s==='fight'||s==='landing'||s==='reveal')&&G.fishDef?String(G.fishDef.id||''):''}};
 window.mancingLiveAction=(event,strikeSeconds=7)=>{
   const now=Date.now(); if(now-liveActionAt<1200) return {ok:false,reason:'cooldown'};
   const kind=String(event?.kind||'').toLowerCase();
@@ -4925,13 +4942,18 @@ if(t.id==='bLive'&&!L.hidden)C.hidden=true;else if(t.id==='lcFab'&&!C.hidden)L.h
 </style>
 <!-- ===== MABAR + NOTIF GLOBAL (ikan Epik & Legendaris) ===== -->
 <style>
-#mpFab{position:fixed;z-index:999998;right:102px;top:58px;width:38px;height:34px;border-radius:999px;padding:0;border:1px solid #2b8495;background:rgba(3,23,34,.8);display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(6px);font-size:18px;line-height:1;-webkit-tap-highlight-color:transparent}
+#mpFab{position:relative;flex:none;width:38px;height:38px;border-radius:50%;padding:0;border:1px solid var(--line,#2b8495);background:var(--glass,rgba(3,23,34,.8));display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(6px);font-size:19px;line-height:1;-webkit-tap-highlight-color:transparent;color:inherit}
 #mpFab[hidden]{display:none}
 #mpFab i{position:absolute;right:0;top:0;width:11px;height:11px;border-radius:50%;background:#7b8a93;border:2px solid #031722;pointer-events:none}
 #mpFab[data-s=ok] i{background:#3ddc84}#mpFab[data-s=wait] i{background:#ffc93c}
 #mpFab b{position:absolute;left:-2px;bottom:-4px;min-width:16px;height:16px;border-radius:8px;padding:0 4px;box-sizing:border-box;background:#ffc93c;color:#031722;font:800 10px/16px system-ui,sans-serif;text-align:center}
 body:has(#app.clean) #mpFab{opacity:.12}
-@media (max-width:480px){#mpFab{right:100px;top:54px}}
+#mpFab #fDot{position:absolute;left:-2px;top:-2px;width:11px;height:11px;border-radius:50%;background:#ff6b5e;border:2px solid #031722}#mpFab #fDot[hidden]{display:none}
+#bFriends{display:none!important}
+#socMenu{position:fixed;z-index:1000000;min-width:150px;padding:6px;border-radius:14px;background:#071d2b;border:1px solid #2b8495;box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:4px}
+#socMenu[hidden]{display:none}
+#socMenu button{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 12px;border-radius:10px;border:0;background:#0c2a3a;color:#e9fbff;font:700 14px system-ui,sans-serif;cursor:pointer;text-align:left}
+#socMenu button:active{background:#0f3a4d}
 #mpPanel{position:fixed;z-index:999999;right:12px;top:100px;width:min(320px,calc(100vw - 24px));max-height:calc(100dvh - 120px);overflow:auto;box-sizing:border-box;background:#071d2b;color:#e9fbff;border:1px solid #2b8495;border-radius:14px;padding:12px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.55)}
 #mpPanel[hidden],#mpInv[hidden]{display:none}
 #mpPanel .h{display:flex;justify-content:space-between;align-items:center;font-size:15px;margin-bottom:6px}
@@ -4971,7 +4993,8 @@ body:has(#app.clean) #mpFab{opacity:.12}
 @keyframes mpE{0%{opacity:0;transform:translateY(8px)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){#mpBan.legend{animation:none}#mpBan{transition:opacity .3s}}
 </style>
-<button id="mpFab" type="button" aria-label="Mabar &amp; notif global" title="Mabar &amp; notif global" data-s="off" hidden>👥<i></i><b hidden></b></button>
+<button id="mpFab" type="button" aria-label="Mabar &amp; notif global" title="Mabar &amp; notif global" data-s="off">👥<i></i><b hidden></b></button>
+<div id="socMenu" hidden><button type="button" id="socF">🤝 Teman</button><button type="button" id="socM">🎮 Mabar</button></div>
 <div id="mpBan" aria-live="polite"></div>
 <div id="mpEmo"></div>
 <div id="mpInv" hidden><div id="mpInvT"></div><div class="row"><button type="button" id="mpInvNo">Tolak</button><button type="button" class="y" id="mpInvYes">Gabung</button></div></div>
@@ -5088,7 +5111,7 @@ function connect(){
   ws.onerror=()=>{};
 }
 function sched(){clearTimeout(S.timer);if(!S.want)return;const d=Math.min(30000,1500*Math.pow(1.7,S.retry++));S.timer=setTimeout(connect,d)}
-setInterval(()=>{const a=window.AUTH;if(a&&a.token){if(fab.hidden)fab.hidden=false;if(!S.want&&S.tok!==a.token){S.want=true}if(S.want)connect()}else if(!fab.hidden&&!(a&&a.token)){fab.hidden=true}},1500);
+setInterval(()=>{const a=window.AUTH;if(a&&a.token){if(!S.want&&S.tok!==a.token){S.want=true}if(S.want)connect()}},1500);
 setInterval(()=>send({type:'ping'}),25000);
 
 /* ---------- pesan dari server ---------- */
@@ -5303,7 +5326,22 @@ function showInvite(m){
   chime('epic');
 }
 function open(f){const show=f==null?panel.hidden:f;panel.hidden=!show;if(show){['lcPanel','livePanel'].forEach(id=>{const e=$(id);if(e)e.hidden=true})}}
-fab.addEventListener('click',()=>open());$('mpClose').addEventListener('click',()=>open(false));
+/* satu tombol gabungan (Teman + Mabar) di samping tombol pengaturan */
+(function(){
+  const hud=document.querySelector('.hud'),set=$('bSet'),fd=$('fDot'),menu=$('socMenu');
+  if(hud&&set){hud.insertBefore(fab,set)}
+  if(fd)fab.append(fd);
+  fab.title='Teman & Mabar';fab.setAttribute('aria-label','Teman & Mabar');
+  const place=()=>{const r=fab.getBoundingClientRect();menu.style.top=(r.bottom+8)+'px';menu.style.right=Math.max(8,innerWidth-r.right)+'px';menu.style.left='auto'};
+  const shut=()=>{menu.hidden=true};
+  fab.addEventListener('click',e=>{e.stopPropagation();if(menu.hidden){place();menu.hidden=false}else shut()});
+  document.addEventListener('pointerdown',e=>{if(!menu.hidden&&!menu.contains(e.target)&&!fab.contains(e.target))shut()});
+  ['keydown','keyup','keypress','pointerdown'].forEach(t=>menu.addEventListener(t,e=>e.stopPropagation()));
+  $('socF').addEventListener('click',()=>{shut();$('bFriends').click()});
+  $('socM').addEventListener('click',()=>{shut();open(true)});
+  addEventListener('resize',shut);
+})();
+$('mpClose').addEventListener('click',()=>open(false));
 
 /* ---------- hook ke game ---------- */
 window.addEventListener('mancing-catch',e=>{
@@ -5325,7 +5363,7 @@ const spTxt=()=>{spBtn.textContent=SP.on?'▦ Split-screen: AKTIF (ketuk untuk m
 spBtn.addEventListener('click',()=>{SP.on=!SP.on;LS.set('mpSplit',SP.on?'1':'0');spTxt();applySplit()});
 function spLayout(n){const ap=document.getElementById('app'),W=(ap&&ap.clientWidth)||innerWidth,H=(ap&&ap.clientHeight)||innerHeight,por=H>W;let c,r;if(n<=2){c=por?1:2;r=por?2:1}else if(n<=4){c=2;r=2}else{c=por?2:3;r=por?3:2}return{c,r,w:W/c,h:H/r}}
 function spOrder(){const m=(S.room&&S.room.members)||[];return [S.me,...m.map(x=>x.u).filter(u=>u!==S.me)].slice(0,6)}
-function rvView(m){if(!m||!m.v)return;let o=SP.V.get(m.u);if(!o){o={t:0,c:{x:0,d:0,fi:.5,zo:0,sz:.3,pr:.3,te:.5,pw:0},g:m.v,s:'idle',fn:'',fr:'',p:0};SP.V.set(m.u,o)}o.g=m.v;o.t=performance.now();o.s=m.v.s;o.fn=m.v.fn;o.fr=m.v.fr;o.fk=m.v.fk||'';o.p=m.v.p}
+function rvView(m){if(!m||!m.v)return;let o=SP.V.get(m.u);if(!o){o={t:0,c:{x:0,d:0,fi:.5,zo:0,sz:.3,pr:.3,te:.5,pw:0},g:m.v,s:'idle',fn:'',fr:'',p:0};SP.V.set(m.u,o)}o.g=m.v;o.t=performance.now();o.s=m.v.s;o.fn=m.v.fn;o.fr=m.v.fr;o.fk=m.v.fk||'';o.rd=m.v.rd||'';o.p=m.v.p}
 function applySplit(){
   const users=spOrder(),n=(S.room&&S.room.members.length)||0,ok=SP.on&&S.room&&n>=2&&S.me,app=$('app');
   if(!ok){if(app)app.classList.remove('split');if(SP.ov){SP.ov.remove();SP.ov=null;SP.mc=null;SP.mcx=null;SP.tiles.clear()}if(window.mancingSplitSet)window.mancingSplitSet(null);cancelAnimationFrame(SP.raf);SP.raf=0;SP.n=0;return}
