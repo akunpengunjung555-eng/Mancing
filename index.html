@@ -559,6 +559,8 @@ async function resync(){
   if(r.ok&&r.j&&typeof r.j.balance==='number'){base=r.j.balance;pend=0;evq=null;loadInto(r.j.state||{});S.coins=base;if(r.j.inbox&&r.j.inbox.length)applyInbox(r.j.inbox);buildRod(RODS.find(x=>x.id===S.rod)||RODS[0]);updateHud();if(sheetKind)renderSheet();toast('Data disinkronkan dengan server.');}
 }
 async function flushAll(){clearTimeout(syncT);if(!MODE.server||!MODE.ready)return;let n=0;while(syncing&&n++<25)await sleep(200);await doSync();}
+window.mancingFlush=()=>flushAll();
+window.mancingSync=()=>{if(!MODE.server||!MODE.ready)return;if(syncing)schedSync(300);else doSync();};
 function save(){
   if(!MODE.ready)return;
   if(MODE.server){schedSync(pend<0?250:1800);return;}
@@ -5090,11 +5092,32 @@ body:has(#app.clean) #mpFab{opacity:.12}
 #mpEmo div.cm{max-width:min(78vw,300px);white-space:normal;word-break:break-word;border-radius:14px;animation-duration:7s}#mpVoice{display:flex;flex-direction:column;gap:4px;margin-top:6px}#mpVoice div{display:flex;align-items:center;gap:8px;font:700 12px system-ui,sans-serif;color:#cfe}#mpVoice b{flex:1;font-weight:700}#mpVoice .sp{color:#5df07a}#mpVoice button{padding:3px 8px;border-radius:8px;border:1px solid #2b8495;background:#06293a;color:#fff;font:700 11px system-ui}#mpMic.on{background:#2f8f4a;border-color:#5df07a}#mpChat{display:flex;gap:6px;margin-top:8px}#mpChat input{flex:1;min-width:0}#mpEmo div{padding:4px 10px;border-radius:99px;background:rgba(3,23,34,.85);border:1px solid #2b8495;color:#fff;font:700 13px system-ui,sans-serif;animation:mpE 3s ease-out forwards}
 @keyframes mpE{0%{opacity:0;transform:translateY(8px)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){#mpBan.legend{animation:none}#mpBan{transition:opacity .3s}}
+#mpPanel select,#mpPanel input[type=number]{width:100%;box-sizing:border-box;min-height:36px;padding:6px 8px;border-radius:9px;border:1px solid #2b8495;background:#04141d;color:#fff;font:600 13px system-ui,sans-serif}
+#mpPanel .lbl{display:block;margin:8px 0 2px;font-size:11px;font-weight:800;letter-spacing:.06em;color:#7fe3e6;text-transform:uppercase}
+#mpPanel .info{margin-top:8px;padding:8px 10px;border-radius:10px;background:linear-gradient(90deg,#3a2a00,#0c2a3a);font-weight:700;line-height:1.45}
+#mpPanel .info .tm{display:block;font:800 26px/1.1 ui-monospace,monospace;color:#ffc93c;letter-spacing:.06em}
+#mpPanel .rk{display:flex;align-items:center;gap:8px;padding:6px 8px;margin-top:4px;border-radius:9px;background:#0c2a3a}
+#mpPanel .rk.me{outline:1px solid #ffc93c}#mpPanel .rk .p{width:26px;font-weight:800;color:#ffc93c;text-align:center}
+#mpPanel .rk .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+#mpPanel .rk .v{font-weight:800;white-space:nowrap}#mpPanel .rk .v small{display:inline;margin:0 0 0 4px;color:#9fd3dc}
+#mpPanel button.b.go{background:#3ddc84;border-color:#3ddc84;color:#032012}
+#mpHud{position:fixed;z-index:999990;left:50%;top:calc(env(safe-area-inset-top,0px) + 4px);transform:translateX(-50%);padding:4px 12px;border-radius:999px;background:rgba(6,16,30,.9);border:1.5px solid #ffc93c;color:#fff;font:800 12px system-ui,sans-serif;white-space:nowrap;cursor:pointer;font-variant-numeric:tabular-nums}
+#mpHud[hidden]{display:none}#mpHud b{color:#ffc93c}
+#mpRes{position:fixed;z-index:1000001;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(2,12,18,.72)}
+#mpRes[hidden]{display:none}
+#mpRes .card{width:min(92vw,360px);max-height:88dvh;overflow:auto;box-sizing:border-box;padding:16px;border-radius:18px;background:#071d2b;border:2px solid #ffc93c;color:#fff;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 0 40px rgba(255,201,60,.35)}
+#mpRes h3{margin:0 0 4px;font-size:20px;text-align:center}#mpRes .sub{text-align:center;color:#9fd3dc;font-size:12px;margin-bottom:8px}
+#mpRes .win{margin:8px 0;padding:10px;border-radius:12px;text-align:center;background:linear-gradient(100deg,#4a3500,#2a0a40);font-weight:800;color:#ffd96a}
+#mpRes .rk{display:flex;gap:8px;padding:6px 8px;margin-top:4px;border-radius:9px;background:#0c2a3a}#mpRes .rk.me{outline:1px solid #ffc93c}
+#mpRes .rk .p{width:26px;text-align:center;font-weight:800;color:#ffc93c}#mpRes .rk .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#mpRes .rk .v{font-weight:800;white-space:nowrap}
+#mpRes button{width:100%;margin-top:12px;min-height:40px;border-radius:10px;border:0;background:#ffc93c;color:#2a1a00;font:800 14px system-ui,sans-serif;cursor:pointer}
 </style>
 <button id="mpFab" type="button" aria-label="Mabar &amp; notif global" title="Mabar &amp; notif global" data-s="off">👥<i></i><b hidden></b></button>
 <div id="socMenu" hidden><button type="button" id="socF">🤝 Teman</button><button type="button" id="socM">🎮 Mabar</button></div>
 <div id="mpBan" aria-live="polite"></div>
 <div id="mpEmo"></div>
+<div id="mpHud" hidden></div>
+<div id="mpRes" hidden><div class="card"><h3 id="mpResT">🏁 Selesai</h3><div class="sub" id="mpResS"></div><div id="mpResW"></div><div id="mpResL"></div><button type="button" id="mpResX">Tutup</button></div></div>
 <div id="mpInv" hidden><div id="mpInvT"></div><div class="row"><button type="button" id="mpInvNo">Tolak</button><button type="button" class="y" id="mpInvYes">Gabung</button></div></div>
 <div id="mpPanel" hidden>
   <div class="h"><b>👥 Mabar &amp; Kabar Global</b><button id="mpClose" type="button" aria-label="Tutup">×</button></div>
@@ -5106,18 +5129,32 @@ body:has(#app.clean) #mpFab{opacity:.12}
   <div class="row"><button class="b" id="mpTest" type="button">🧪 Tes notif</button></div>
   <div class="log" id="mpHist">Belum ada kabar.</div>
 
+  <h4>🏅 Papan peringkat turnamen (global)</h4>
+  <div class="row"><button class="b" data-by="prize" type="button">Hadiah</button><button class="b" data-by="wins" type="button">Menang</button><button class="b" data-by="pts" type="button">Poin</button></div>
+  <div class="log" id="mpGBoard">Ketuk salah satu tombol untuk memuat.</div>
+
   <h4>🎮 Mabar</h4>
   <div id="mpOut">
+    <span class="lbl">Mode</span>
+    <select id="mpMode"><option value="casual">🎮 Mabar biasa (hasil hanya di room ini)</option><option value="tourney">🏆 Turnamen (hasil masuk papan peringkat global)</option></select>
+    <span class="lbl">Durasi</span>
+    <select id="mpDur"><option value="300">5 menit</option><option value="600" selected>10 menit</option><option value="900">15 menit</option><option value="1800">30 menit</option><option value="3600">60 menit</option></select>
+    <span class="lbl">Biaya pendaftaran (juta koin)</span>
+    <input id="mpFee" type="number" min="0" step="1" value="0" inputmode="numeric">
+    <small id="mpFeeHint"></small>
     <div class="row"><button class="b pri" id="mpCreate" type="button">➕ Buat room</button></div>
+    <span class="lbl">Atau gabung dengan kode</span>
     <div class="row"><input id="mpCodeIn" type="text" maxlength="4" placeholder="KODE" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="b" id="mpJoin" type="button" style="flex:0 0 90px">Gabung</button></div>
-    <small>Maks 4 pemain per room. Semua anggota melihat status &amp; tangkapan langka satu sama lain, dan poin tim naik bersama (Langka 1, Epik 3, Legendaris 10, Berkilau ×2).</small>
+    <small>Maks 6 pemain. Tiap pemain punya poin sendiri (Langka 1, Epik 3, Legendaris 10, Berkilau ×2). Waktu habis, poin tertinggi menang. Kalau ada biaya pendaftaran, juara mendapat 50% dari total biaya (seri dibagi rata, tanpa poin = biaya dikembalikan).</small>
   </div>
   <div id="mpIn" hidden>
     <div class="code" id="mpCode" title="Ketuk untuk menyalin">----</div>
     <small style="text-align:center">Ketuk kode untuk menyalin &amp; bagikan ke teman</small>
     <div id="mpMem"></div>
-    <div class="score"><span>🏆 Poin tim</span><span id="mpScore">0</span></div>
-    <small id="mpScoreD"></small>
+    <div class="info" id="mpInfo"></div>
+    <div class="row"><button class="b go" id="mpStart" type="button" hidden>▶ Mulai pertandingan</button></div>
+    <h4>🏆 Peringkat (poin per pemain)</h4>
+    <div id="mpBoard"></div>
     <div class="emo" id="mpEmoBar"></div>
     <div class="row"><button class="b" id="mpMic" type="button">🎤 Nyalakan mic</button></div>
     <div id="mpVoice"></div>
@@ -5203,7 +5240,7 @@ function connect(){
   S.tok=a.token;dot('wait','Menyambung ke server…');
   let ws;try{ws=new WebSocket(wsUrl(a.token))}catch(e){return sched()}
   S.ws=ws;
-  ws.onopen=()=>{S.retry=0;S.lastSt='';if(S.room)send({type:'room_join',code:S.room.code,resume:true})};
+  ws.onopen=()=>{S.retry=0;S.lastSt='';if(S.room)send({type:'room_join',code:S.room.code,resume:S.room.fee===0&&S.room.mode==='casual',rejoin:true,fee:S.room.fee})};
   ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}route(m)};
   ws.onclose=ev=>{if(S.ws!==ws)return;S.ws=null;dot('off','Terputus. Mencoba lagi…');if(ev.code===4000){dot('off','Dibuka di tab/perangkat lain. Ketuk 👥 lalu muat ulang untuk menyambung lagi.');S.want=false;return}sched()};
   ws.onerror=()=>{};
@@ -5222,13 +5259,15 @@ function route(m){
       addHist(it);
       if(gOn.checked)announce(it);
       break}
-    case 'room':S.room=m.room;if(!m.room){S.feed=[]}renderRoom();break;
+    case 'room':S.room=m.room;if(m.room)m.room._rx=performance.now();if(!m.room){S.feed=[]}renderRoom();break;
     case 'room_status':{if(S.room){const x=S.room.members.find(y=>y.u===m.user);if(x){x.st=m.st;renderRoom()}}break}
     case 'room_event':roomEvent(m);break;
     case 'view':rvView(m);break;
     case 'chat':chatIn(m);break;
     case 'rtc':rtcIn(m);break;
     case 'invite':showInvite(m);break;
+    case 'join_need':joinNeed(m);break;
+    case 'wallet':if(window.mancingSync)window.mancingSync();break;
     case 'notice':feedAdd('ℹ️ '+m.message);break;
     case 'error':feedAdd('⚠️ '+m.message);setText($('mpStatus'),m.message);break;
   }
@@ -5377,24 +5416,143 @@ function roomEvent(m){
   else if(m.kind==='leave')feedAdd('➖ @'+m.user+' keluar room');
   else if(m.kind==='chat'){chatIn(m)}
   else if(m.kind==='emote'){feedAdd('@'+m.user+' '+m.e);const d=document.createElement('div');d.textContent='@'+m.user+' '+m.e;$('mpEmo').append(d);setTimeout(()=>d.remove(),3100);while($('mpEmo').children.length>4)$('mpEmo').firstChild.remove()}
-  else if(m.kind==='catch'){const t=T[m.fish.rar]||T.rare;feedAdd(t.ic+' '+(m.user===S.me?'Kamu':'@'+m.user)+' dapat '+m.fish.name+' (+'+m.pts+' poin)')}
+  else if(m.kind==='catch'){const t=T[m.fish.rar]||T.rare;feedAdd(t.ic+' '+(m.user===S.me?'Kamu':'@'+m.user)+' dapat '+m.fish.name+(m.pts?' (+'+m.pts+' poin)':''))}
+  else if(m.kind==='start'){S.resSig='';feedAdd('▶ @'+m.by+' memulai pertandingan. Bersiap!');chime('epic')}
+  else if(m.kind==='go'){feedAdd('🏁 MULAI! Tangkap ikan langka sebanyak-banyaknya.');chime('legend')}
+  else if(m.kind==='end'){feedAdd('🏁 Pertandingan selesai.');showResults(m.results)}
 }
 
 /* ---------- tampilan room ---------- */
+const fmtC=n=>{n=Math.max(0,Math.floor(Number(n)||0));if(n>=1e12)return +(n/1e12).toFixed(2)+'T';if(n>=1e9)return +(n/1e9).toFixed(2)+'B';if(n>=1e6)return +(n/1e6).toFixed(n>=1e8?0:1)+'M';if(n>=1e3)return Math.round(n/1e3)+'K';return String(n)};
+const mmss=ms=>{const t=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(t/3600),m=Math.floor(t%3600/60),s2=t%60;return (h?h+':'+String(m).padStart(2,'0'):String(m))+':'+String(s2).padStart(2,'0')};
+const modeName=r=>r.mode==='tourney'?'🏆 Turnamen':'🎮 Mabar biasa';
+const curLeft=r=>Math.max(0,(r.left||0)-(performance.now()-(r._rx||performance.now())));
+const placeOf=(list,i)=>1+list.filter(x=>x.pts>list[i].pts).length;
+const myPts=r=>{const b=(r.board||[]).find(x=>x.u===S.me);return b?b.pts:0};
+const myPlace=r=>{const l=r.board||[],i=l.findIndex(x=>x.u===S.me);return i<0?0:placeOf(l,i)};
+function infoText(r){
+  const prize=Math.floor((r.pool||0)*(r.pct||50)/100);
+  let t=modeName(r)+' · '+mmss((r.dur||0)*1000)+' · '+(r.fee>0?'biaya '+fmtC(r.fee):'gratis');
+  if(r.fee>0)t+='\nPool '+fmtC(r.pool)+' · hadiah juara '+fmtC(prize)+' ('+(r.pct||50)+'%)';
+  t+='\n'+(r.mode==='tourney'?'Hasil masuk papan peringkat global.':'Hasil hanya berlaku di room ini.');
+  return t;
+}
+function tickUi(){
+  const r=S.room,hud=$('mpHud');
+  if(!r||(r.phase!=='countdown'&&r.phase!=='running')){hud.hidden=true;if(r&&r.phase==='lobby')paintInfo();return}
+  paintInfo();
+  hud.hidden=false;
+  hud.textContent='';
+  if(r.phase==='countdown'){hud.append('⏳ Mulai dalam ',Object.assign(document.createElement('b'),{textContent:String(Math.ceil(curLeft(r)/1000))}))}
+  else{hud.append('⏱ ',Object.assign(document.createElement('b'),{textContent:mmss(curLeft(r))}),' · #'+(myPlace(r)||'-')+' · ',Object.assign(document.createElement('b'),{textContent:myPts(r)+' poin'}))}
+}
+function paintInfo(){
+  const r=S.room,el=$('mpInfo');if(!r||!el)return;
+  el.textContent='';
+  const head=document.createElement('span');head.style.whiteSpace='pre-line';head.textContent=infoText(r);
+  const st=document.createElement('span');st.className='tm';
+  if(r.phase==='lobby')st.textContent='MENUNGGU';
+  else if(r.phase==='countdown')st.textContent='MULAI '+Math.ceil(curLeft(r)/1000);
+  else if(r.phase==='running')st.textContent='⏱ '+mmss(curLeft(r));
+  else st.textContent='SELESAI';
+  el.append(st,head);
+}
 function renderRoom(){
   const r=S.room;$('mpOut').hidden=!!r;$('mpIn').hidden=!r;applySplit();vcSync();
   fab.firstChild.textContent=r?'🎮':'👥';
-  if(!r)return;
+  if(!r){$('mpHud').hidden=true;return}
   setText($('mpCode'),r.code);
   const box=$('mpMem');box.textContent='';
   r.members.forEach(x=>{
     const d=document.createElement('div');d.className='mem';
     const n=document.createElement('span');n.className='n';n.textContent=(x.u===r.host?'👑 ':'')+'@'+x.u+(x.u===S.me?' (kamu)':'');
-    const s=document.createElement('span');s.className='s'+(x.st==='bite'||x.st==='fight'?' hot':'');s.textContent=stLabel(x.st);
-    d.append(n,s);box.append(d);
+    const s2=document.createElement('span');s2.className='s'+(x.st==='bite'||x.st==='fight'?' hot':'');s2.textContent=stLabel(x.st);
+    d.append(n,s2);box.append(d);
   });
-  setText($('mpScore'),String(r.score.pts));
-  setText($('mpScoreD'),r.score.catches+' tangkapan langka+ · '+r.score.epic+' epik · '+r.score.legend+' legendaris · '+r.members.length+'/6 pemain');
+  paintInfo();
+  const sb=$('mpStart'),host=r.host===S.me,can=host&&(r.phase==='lobby'||(r.phase==='ended'&&r.fee===0));
+  sb.hidden=!can;sb.disabled=r.members.length<2;sb.textContent=r.members.length<2?'▶ Mulai (butuh minimal 2 pemain)':(r.phase==='ended'?'🔁 Main lagi (ronde baru)':'▶ Mulai pertandingan');
+  const bd=$('mpBoard');bd.textContent='';
+  const list=r.board||[];
+  list.forEach((x,i)=>{
+    const d=document.createElement('div');d.className='rk'+(x.u===S.me?' me':'');
+    const p=document.createElement('span');p.className='p';p.textContent=(['🥇','🥈','🥉'][placeOf(list,i)-1])||('#'+placeOf(list,i));
+    const n=document.createElement('span');n.className='n';n.textContent='@'+x.u+(x.u===S.me?' (kamu)':'')+(r.members.some(m=>m.u===x.u)?'':' · offline');
+    const v=document.createElement('span');v.className='v';v.textContent=x.pts+' poin';const sm=document.createElement('small');sm.textContent=x.catches+' ikan';v.append(sm);
+    d.append(p,n,v);bd.append(d);
+  });
+  if(!list.length)bd.textContent='Belum ada pemain.';
+  tickUi();
+  if(r.phase==='ended'&&r.results)showResults(r.results,true);
+}
+setInterval(tickUi,250);
+function showResults(res,quiet){
+  if(!res)return;const sig=JSON.stringify(res.list)+'|'+res.pool+'|'+res.refunded;if(S.resSig===sig)return;S.resSig=sig;
+  $('mpResT').textContent=res.refunded?'🏁 Selesai tanpa pemenang':'🏁 Pertandingan selesai';
+  setText($('mpResS'),(res.mode==='tourney'?'🏆 Turnamen':'🎮 Mabar biasa')+(res.fee>0?' · biaya '+fmtC(res.fee)+' · pool '+fmtC(res.pool):' · gratis'));
+  const w=$('mpResW');w.textContent='';
+  const top=(res.list||[]).filter(x=>x.place===1&&x.pts>0);
+  const line=document.createElement('div');line.className='win';
+  if(res.refunded)line.textContent='Tidak ada yang dapat poin. Semua biaya pendaftaran dikembalikan.';
+  else if(top.length){
+    const names=top.map(x=>'@'+x.u+(x.u===S.me?' (kamu)':'')).join(' & ');
+    line.textContent='👑 '+names+(res.fee>0?' menang +'+fmtC(top[0].prize)+' koin'+(top.length>1?' masing-masing':''):' juara!');
+  }else line.textContent='Pertandingan selesai.';
+  w.append(line);
+  if(res.saved===false){const e=document.createElement('div');e.className='sub';e.textContent='⚠️ Hadiah gagal diproses server. Koin yang tertahan akan dikembalikan otomatis; hubungi admin bila perlu.';w.append(e)}
+  const l=$('mpResL');l.textContent='';
+  (res.list||[]).forEach(x=>{
+    const d=document.createElement('div');d.className='rk'+(x.u===S.me?' me':'');
+    const p=document.createElement('span');p.className='p';p.textContent=(['🥇','🥈','🥉'][x.place-1])||('#'+x.place);
+    const n=document.createElement('span');n.className='n';n.textContent='@'+x.u+(x.u===S.me?' (kamu)':'');
+    const v=document.createElement('span');v.className='v';v.textContent=x.pts+' poin'+(x.prize>0?' · +'+fmtC(x.prize):'');
+    d.append(p,n,v);l.append(d);
+  });
+  const foot=document.createElement('div');foot.className='sub';foot.style.marginTop='8px';
+  foot.textContent=res.global?'Hasil tercatat di papan peringkat global.':'Hasil ini hanya berlaku di room ini (tidak masuk papan global).';l.append(foot);
+  $('mpRes').hidden=false;
+  if(window.mancingSync)window.mancingSync();
+}
+$('mpResX').addEventListener('click',()=>{$('mpRes').hidden=true});
+['keydown','keyup','keypress','pointerdown'].forEach(t=>$('mpRes').addEventListener(t,ev=>ev.stopPropagation()));
+$('mpHud').addEventListener('click',()=>{open(true)});
+$('mpStart').addEventListener('click',()=>{if(need())send({type:'room_start'})});
+
+/* ---------- form buat room & papan peringkat global ---------- */
+function feeHint(){
+  const t=$('mpMode').value==='tourney',f=Math.floor(Number($('mpFee').value)||0);
+  setText($('mpFeeHint'),t?'Turnamen: biaya minimal 100 (juta) = 100M koin. Hasil masuk papan global.':'Mabar biasa: isi 0 untuk gratis, atau minimal 100 (juta) kalau mau pakai hadiah. Hasil hanya di room.');
+  if(f>0)$('mpFeeHint').textContent+=' Juara dapat 50% dari total biaya semua pemain.';
+}
+$('mpMode').addEventListener('change',()=>{const t=$('mpMode').value==='tourney';if(t&&Number($('mpFee').value)<100)$('mpFee').value=100;if(!t&&Number($('mpFee').value)===100)$('mpFee').value=0;feeHint()});
+$('mpFee').addEventListener('input',feeHint);feeHint();
+async function pushWallet(){try{if(window.mancingFlush)await window.mancingFlush()}catch(e){}}
+async function doCreate(){
+  const mode=$('mpMode').value,dur=Number($('mpDur').value)||600,feeM=Math.floor(Number($('mpFee').value)||0),fee=feeM*1e6;
+  if(feeM<0||(fee>0&&feeM<100)){setText($('mpStatus'),'Biaya minimal 100 juta koin (atau 0 = gratis).');return}
+  if(mode==='tourney'&&feeM<100){setText($('mpStatus'),'Turnamen wajib biaya minimal 100 juta koin.');return}
+  if(!need())return;
+  if(fee>0&&!confirm('Kamu akan membayar '+fmtC(fee)+' koin untuk mendaftar di room ini. Lanjut?'))return;
+  await pushWallet();send({type:'room_create',mode,dur,fee});
+}
+async function joinCode(code,fee){await pushWallet();send({type:'room_join',code,fee:fee||0})}
+function joinNeed(m){
+  const prize=Math.floor(m.fee*(m.pct||50)/100);
+  if(confirm('Room '+m.code+' (host @'+m.host+')\n'+(m.mode==='tourney'?'Turnamen':'Mabar biasa')+' · '+mmss(m.dur*1000)+'\nBiaya pendaftaran: '+fmtC(m.fee)+' koin\nJuara mendapat 50% dari total biaya.\n\nBayar dan gabung?'))joinCode(m.code,m.fee);
+}
+document.querySelectorAll('#mpPanel [data-by]').forEach(b=>b.addEventListener('click',()=>loadBoard(b.dataset.by)));
+async function loadBoard(by){
+  const el=$('mpGBoard'),a=window.AUTH;if(!a||!a.token){el.textContent='Belum login.';return}
+  el.textContent='Memuat…';
+  try{
+    const r=await fetch('/api/tourney/board',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+a.token},body:JSON.stringify({by})}),j=await r.json();
+    if(!j.ok)throw 0;
+    const rows=j.board.map((x,i)=>(i+1)+'. @'+x.username+' · '+x.wins+' menang/'+x.matches+' main · hadiah '+fmtC(x.prize)+' · '+x.pts+' poin');
+    let t=rows.length?rows.join('\n'):'Belum ada turnamen yang selesai.';
+    if(j.me)t+='\n\nKamu: '+j.me.wins+' menang/'+j.me.matches+' main · hadiah '+fmtC(j.me.prize)+' · '+j.me.pts+' poin';
+    if(j.recent&&j.recent.length)t+='\n\nJuara terbaru:\n'+j.recent.map(x=>'🏆 @'+x.username+' (room '+x.code+') +'+fmtC(x.prize)).join('\n');
+    el.textContent=t;
+  }catch(e){el.textContent='Gagal memuat papan peringkat.'}
 }
 $('mpChat').addEventListener('submit',e=>{
   e.preventDefault();const inp=$('mpChatIn'),t=inp.value.replace(/[\u0000-\u001f]/g,' ').trim().slice(0,120);
@@ -5406,8 +5564,8 @@ $('mpChat').addEventListener('submit',e=>{
 
 /* ---------- aksi ---------- */
 const need=()=>{if(S.ws&&S.ws.readyState===1)return true;setText($('mpStatus'),'Belum tersambung ke server.');return false};
-$('mpCreate').addEventListener('click',()=>{if(need())send({type:'room_create'})});
-$('mpJoin').addEventListener('click',()=>{const c=$('mpCodeIn').value.trim().toUpperCase();if(c.length!==4){setText($('mpStatus'),'Kode room 4 karakter.');return}if(need())send({type:'room_join',code:c})});
+$('mpCreate').addEventListener('click',doCreate);
+$('mpJoin').addEventListener('click',()=>{const c=$('mpCodeIn').value.trim().toUpperCase();if(c.length!==4){setText($('mpStatus'),'Kode room 4 karakter.');return}if(need())joinCode(c)});
 $('mpCodeIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('mpJoin').click()});
 $('mpLeave').addEventListener('click',()=>{send({type:'room_leave'});S.room=null;renderRoom()});
 $('mpInvBtn').addEventListener('click',()=>{const u=$('mpInvIn').value.trim().toLowerCase().replace(/^@/,'');if(!u)return;if(need()){send({type:'invite',to:u});$('mpInvIn').value=''}});
@@ -5417,9 +5575,9 @@ $('mpTest').addEventListener('click',()=>{
   [['epic','Hiu Contoh',120],['legend','Naga Laut Contoh',640]].forEach(([r,n,w],i)=>setTimeout(()=>announce({user:S.me||'kamu',self:true,fish:{rar:r,name:n,w,shiny:0}}),i*300));
 });
 function showInvite(m){
-  const t=$('mpInvT');t.textContent='@'+m.from+' mengajak mabar di room '+m.code+'.';$('mpInv').hidden=false;
+  const t=$('mpInvT');t.textContent='@'+m.from+' mengajak '+(m.mode==='tourney'?'turnamen':'mabar')+' di room '+m.code+(m.fee>0?' (biaya '+fmtC(m.fee)+')':'')+'.';$('mpInv').hidden=false;
   clearTimeout(S.invT);S.invT=setTimeout(()=>{$('mpInv').hidden=true},25000);
-  $('mpInvYes').onclick=()=>{$('mpInv').hidden=true;if(need()){send({type:'room_join',code:m.code});panel.hidden=false}};
+  $('mpInvYes').onclick=()=>{$('mpInv').hidden=true;if(need()){joinCode(m.code,0);panel.hidden=false}};
   $('mpInvNo').onclick=()=>{$('mpInv').hidden=true};
   chime('epic');
 }
@@ -5468,7 +5626,7 @@ function applySplit(){
   if(!SP.ov){SP.ov=document.createElement('div');SP.ov.id='mpSplit';SP.gl.after(SP.ov)}
   const L=spLayout(users.length);SP.n=users.length;if(app){app.classList.add('split');app.style.setProperty('--sw',L.w+'px');app.style.setProperty('--sh',L.h+'px')}
   let me=SP.ov.querySelector('.me');if(!me){me=document.createElement('div');me.className='me';SP.ov.append(me)}
-  Object.assign(me.style,{left:'0px',top:'0px',width:L.w+'px',height:L.h+'px'});me.textContent='🎣 Kamu (@'+S.me+')';
+  Object.assign(me.style,{left:'0px',top:'0px',width:L.w+'px',height:L.h+'px'});{const bm=S.room&&(S.room.board||[]).find(x=>x.u===S.me);me.textContent='🎣 Kamu (@'+S.me+')'+(bm?' · '+bm.pts+' poin':'')}
   let mc=SP.ov.querySelector('.mc');if(!mc){mc=document.createElement('canvas');mc.className='mc';SP.ov.append(mc);SP.mc=mc;SP.mcx=mc.getContext('2d')}
   mc.width=Math.max(120,Math.round(L.w));mc.height=Math.max(90,Math.round(L.h));mc.style.width=L.w+'px';mc.style.height=L.h+'px';
   const keep=new Set();
@@ -5509,7 +5667,7 @@ function spDraw(c,w,h,u,o,now,stale){
   // ikan terangkat
   if((s==='landing'||s==='reveal')&&o.fn){const col={common:'#cfe',rare:'#4fb3ff',epic:'#c77bff',legend:'#ffc93c'}[o.fr]||'#fff';c.textAlign='center';c.fillStyle='#000b';c.fillRect(w*.1,h*.76,w*.8,h*.14);c.fillStyle=col;c.font='900 '+Math.round(17*U)+'px system-ui';c.fillText('🐟 '+o.fn,w*.5,h*.855)}
   // label
-  c.textAlign='left';c.font='800 '+Math.round(12*Math.max(.8,U))+'px system-ui';const lab='@'+u+' · '+stLabel(s);const lw=c.measureText(lab).width+14;
+  c.textAlign='left';c.font='800 '+Math.round(12*Math.max(.8,U))+'px system-ui';const bd=S.room&&(S.room.board||[]).find(x=>x.u===u),lab='@'+u+' · '+stLabel(s)+(bd?' · '+bd.pts+' poin':'');const lw=c.measureText(lab).width+14;
   c.fillStyle=(s==='bite'||s==='fight')?'#ff8a3ccc':'#000a';c.fillRect(0,0,lw,22*Math.max(.8,U));c.fillStyle='#fff';c.fillText(lab,7,15*Math.max(.8,U));
   if(stale){c.fillStyle='#0007';c.fillRect(0,0,w,h);c.fillStyle='#cfe';c.textAlign='center';c.font='700 '+Math.round(13*Math.max(.9,U))+'px system-ui';c.fillText(o.g?'Menunggu data @'+u+'…':(o.ms&&o.ms!=='lobi'?'@'+u+' sedang main · menyambung tampilan…':'@'+u+' masih di lobi'),w/2,h/2)}
 }

@@ -83,6 +83,15 @@ async function init(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS gift_log(
       sender TEXT NOT NULL, receiver TEXT NOT NULL, fish TEXT NOT NULL, at INTEGER NOT NULL)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS gift_log_sender ON gift_log(sender, at)'),
+    // Turnamen: biaya pendaftaran yang sedang ditahan (held) + riwayat hasil global
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS tourney_entry(
+      mid TEXT NOT NULL, username TEXT NOT NULL, fee INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'held',
+      at INTEGER NOT NULL, UNIQUE(mid, username))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS tourney_log(
+      mid TEXT NOT NULL, code TEXT NOT NULL, username TEXT NOT NULL, pts INTEGER NOT NULL, catches INTEGER NOT NULL,
+      epic INTEGER NOT NULL, legend INTEGER NOT NULL, place INTEGER NOT NULL, prize INTEGER NOT NULL, fee INTEGER NOT NULL, at INTEGER NOT NULL)`),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS tourney_log_user ON tourney_log(username)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS tourney_log_at ON tourney_log(at)'),
   ]);
   try { await env.DB.prepare("ALTER TABLE users ADD COLUMN inbox TEXT NOT NULL DEFAULT '[]'").run(); } catch { /* sudah ada */ }
   ready = true;
@@ -246,11 +255,14 @@ async function fish(env, req, u, path) {
     if (balance < 0) return err(400, 'Saldo tidak cukup.');
     const fresh = await env.DB.prepare('SELECT balance, inbox FROM users WHERE username=?').bind(u.username).first();
     const inbox = JSON.parse((fresh && fresh.inbox) || '[]');
-    const newBal = (fresh ? fresh.balance : u.balance) + d; // termasuk koin kiriman admin yang masuk barusan
+    const newBal = (fresh ? fresh.balance : u.balance) + d; // termasuk koin kiriman admin / biaya & hadiah turnamen yang masuk barusan
     if (newBal < 0) return err(400, 'Saldo tidak cukup.');
-    await env.DB.prepare(`UPDATE users SET balance=?, state=?, win_start=?, win_amt=?, inbox=${CLEAR_READ_INBOX} WHERE username=?`)
-      .bind(newBal, stateStr, winStart, winAmt, inbox.length, u.username).run();
-    return J({ ok: true, balance: newBal, capped, inbox });
+    // relatif (balance+d), bukan menimpa: biaya/hadiah turnamen dari server tidak ikut tertimpa
+    const upd = await env.DB.prepare(`UPDATE users SET balance=balance+?, state=?, win_start=?, win_amt=?, inbox=${CLEAR_READ_INBOX} WHERE username=? AND balance+?>=0`)
+      .bind(d, stateStr, winStart, winAmt, inbox.length, u.username, d).run();
+    if (!upd.meta.changes) return err(400, 'Saldo tidak cukup.');
+    const after = await env.DB.prepare('SELECT balance FROM users WHERE username=?').bind(u.username).first();
+    return J({ ok: true, balance: after ? after.balance : newBal, capped, inbox });
   }
   return err(404, 'Not found');
 }
@@ -307,6 +319,23 @@ async function social(env, req, u, path) {
     return J({ ok: true });
   }
   return err(404, 'Not found');
+}
+
+// ---- Papan peringkat turnamen (global) ----
+async function tourney(env, req, u, path) {
+  if (path !== '/tourney/board') return err(404, 'Not found');
+  const b = await readJson(req);
+  const ORDER = {
+    prize: 'prize DESC, wins DESC, pts DESC',
+    wins: 'wins DESC, prize DESC, pts DESC',
+    pts: 'pts DESC, wins DESC, prize DESC',
+  };
+  const by = ORDER[b.by] ? b.by : 'prize';
+  const agg = 'SELECT username, COUNT(*) matches, SUM(CASE WHEN place=1 THEN 1 ELSE 0 END) wins, SUM(prize) prize, SUM(pts) pts, SUM(fee) spent FROM tourney_log';
+  const { results } = await env.DB.prepare(agg + ' GROUP BY username ORDER BY ' + ORDER[by] + ' LIMIT 30').all();
+  const mine = await env.DB.prepare(agg + ' WHERE username=? GROUP BY username').bind(u.username).first();
+  const { results: recent } = await env.DB.prepare('SELECT code, username, pts, prize, fee, at FROM tourney_log WHERE place=1 ORDER BY at DESC LIMIT 8').all();
+  return J({ ok: true, by, board: results, me: mine || null, recent });
 }
 
 // ---- Kirim ikan ke teman ----
@@ -390,6 +419,7 @@ export default {
       if (path.startsWith('/admin/')) return await admin(env, req, u, path);
       if (path.startsWith('/fish/') && req.method === 'POST') return await fish(env, req, u, path);
       if (path.startsWith('/friends/') && req.method === 'POST') return await social(env, req, u, path);
+      if (path.startsWith('/tourney/') && req.method === 'POST') return await tourney(env, req, u, path);
       if (path === '/gift/fish' && req.method === 'POST') return await giftFish(env, req, u);
       return err(404, 'Not found');
     } catch (e) {
@@ -403,6 +433,12 @@ export default {
 const RAR_OK = new Set(['rare', 'epic', 'legend']);
 const RAR_PTS = { rare: 1, epic: 3, legend: 10 };
 const ROOM_MAX = 6;
+const MATCH_DURS = new Set([300, 600, 900, 1800, 3600]); // detik: 5, 10, 15, 30, 60 menit
+const MIN_FEE = 100_000_000;      // 100M koin
+const MAX_FEE = 1_000_000_000_000; // 1T koin
+const PRIZE_PCT = 50;             // juara dapat 50% dari total biaya pendaftaran (sisanya hangus)
+const COUNTDOWN_MS = 5000;
+const EMPTY_GRACE_MS = 90000;     // semua pemain putus saat pertandingan jalan: tunggu 90 dtk sebelum diselesaikan
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_RE = /^[A-Z2-9]{4}$/;
 const EMOTES = new Set(['👍', '🔥', '😂', '😱', '🎣', '👑', '🐟', '❤️']);
@@ -412,8 +448,22 @@ export class GameRoom {
   constructor(ctx, env) {
     this.ctx = ctx; this.env = env;
     this.peers = new Map();   // ws -> { user, room, st, tokens, tAt, lastCatch }
-    this.rooms = new Map();   // code -> { code, host, members:Set<ws>, score:{pts,catches,epic,legend} }
+    this.rooms = new Map();   // code -> room (lihat makeRoom)
     this.globalWin = { at: 0, n: 0 };
+    this.tickT = null;
+    // Instance baru = tidak ada pertandingan yang masih berjalan: kembalikan biaya pendaftaran yang masih tertahan.
+    ctx.blockConcurrencyWhile(async () => {
+      try {
+        await init(env);
+        const { results } = await env.DB.prepare("SELECT mid, username, fee FROM tourney_entry WHERE status='held' LIMIT 500").all();
+        if (results.length) {
+          await env.DB.batch(results.flatMap(e => [
+            env.DB.prepare('UPDATE users SET balance=balance+? WHERE username=?').bind(e.fee, e.username),
+            env.DB.prepare("DELETE FROM tourney_entry WHERE mid=? AND username=? AND status='held'").bind(e.mid, e.username),
+          ]));
+        }
+      } catch (e) { console.error('recover', e); }
+    });
   }
   send(ws, obj) { try { ws.send(JSON.stringify(obj)); } catch { this.drop(ws); } }
   broadcast(obj, except) {
@@ -427,14 +477,30 @@ export class GameRoom {
     this.peers.delete(ws);
     this.broadcast({ type: 'online', n: this.online() });
   }
+  newMid() { return crypto.randomUUID().replace(/-/g, '').slice(0, 16); }
+  makeRoom(code, host, mode, fee, dur) {
+    return { code, host, members: new Set(), mode, fee, dur, phase: 'lobby', mid: this.newMid(),
+      entrants: new Map(), scores: new Map(), startAt: 0, endAt: 0, emptyAt: 0, settled: false, results: null };
+  }
+  zero() { return { pts: 0, catches: 0, epic: 0, legend: 0 }; }
+  // papan poin per individu, urut dari poin tertinggi
+  board(r) {
+    return [...r.scores].map(([u, s]) => ({ u, ...s }))
+      .sort((a, b) => b.pts - a.pts || b.legend - a.legend || b.epic - a.epic || a.u.localeCompare(b.u));
+  }
   roomView(r) {
+    const now = Date.now();
     return {
-      code: r.code, host: r.host, score: r.score,
+      code: r.code, host: r.host, mode: r.mode, fee: r.fee, dur: r.dur, phase: r.phase,
+      pool: r.fee * r.entrants.size, pct: PRIZE_PCT,
+      left: r.phase === 'countdown' ? Math.max(0, r.startAt - now) : r.phase === 'running' ? Math.max(0, r.endAt - now) : 0,
+      board: this.board(r), results: r.phase === 'ended' ? r.results : null,
       members: [...r.members].map(w => { const p = this.peers.get(w); return { u: p.user, st: p.st, last: p.lastCatch || null }; }),
     };
   }
   pushRoom(r) { const v = { type: 'room', room: this.roomView(r) }; for (const w of r.members) this.send(w, v); }
   toRoom(r, obj, except) { for (const w of r.members) if (w !== except) this.send(w, obj); }
+  wallet(user) { for (const [w, q] of this.peers) if (q.user === user) this.send(w, { type: 'wallet' }); }
   newCode() {
     for (let t = 0; t < 50; t++) {
       const b = crypto.getRandomValues(new Uint8Array(4));
@@ -443,31 +509,149 @@ export class GameRoom {
     }
     return '';
   }
-  joinRoom(ws, code, resume) {
-    const p = this.peers.get(ws);
-    code = String(code || '').toUpperCase().trim();
-    if (!CODE_RE.test(code)) return this.send(ws, { type: 'error', message: 'Kode room harus 4 huruf/angka.' });
-    if (p.room === code) return this.pushRoom(this.rooms.get(code));
+  // ---- uang turnamen (semua lewat D1, atomik) ----
+  async charge(user, fee, mid) {
+    const D = this.env.DB;
+    try {
+      const res = await D.batch([
+        D.prepare("INSERT INTO tourney_entry(mid,username,fee,status,at) SELECT ?,?,?,'held',? FROM users WHERE username=? AND balance>=?").bind(mid, user, fee, Date.now(), user, fee),
+        D.prepare("UPDATE users SET balance=balance-? WHERE username=? AND balance>=? AND EXISTS(SELECT 1 FROM tourney_entry WHERE mid=? AND username=? AND status='held')").bind(fee, user, fee, mid, user),
+      ]);
+      return res[0].meta.changes === 1 && res[1].meta.changes === 1;
+    } catch (e) { console.error('charge', e); return false; }
+  }
+  async refund(mid, user) {
+    const D = this.env.DB;
+    try {
+      await D.batch([
+        D.prepare("UPDATE users SET balance=balance+(SELECT fee FROM tourney_entry WHERE mid=? AND username=? AND status='held') WHERE username=? AND EXISTS(SELECT 1 FROM tourney_entry WHERE mid=? AND username=? AND status='held')").bind(mid, user, user, mid, user),
+        D.prepare("DELETE FROM tourney_entry WHERE mid=? AND username=? AND status='held'").bind(mid, user),
+      ]);
+    } catch (e) { console.error('refund', e); }
+    this.wallet(user);
+  }
+  async finish(r) {
+    if (r.settled) return;
+    r.settled = true; r.phase = 'ended';
+    const D = this.env.DB, now = Date.now();
+    const list = this.board(r).map(b => ({ ...b, place: 0, prize: 0 }));
+    list.forEach(b => { b.place = 1 + list.filter(x => x.pts > b.pts).length; });
+    const top = list.length ? list[0].pts : 0;
+    const paying = r.fee > 0, entrants = [...r.entrants.keys()];
+    const pool = r.fee * entrants.length;
+    const refunded = paying && top <= 0; // tidak ada yang dapat poin: semua biaya dikembalikan
+    if (paying && !refunded) {
+      const win = list.filter(b => b.place === 1);
+      const each = Math.floor(Math.floor(pool * PRIZE_PCT / 100) / win.length); // seri = hadiah dibagi rata
+      win.forEach(b => { b.prize = each; });
+    }
+    const stmts = [];
+    if (paying) {
+      if (refunded) entrants.forEach(u => stmts.push(D.prepare('UPDATE users SET balance=balance+? WHERE username=?').bind(r.fee, u)));
+      else list.forEach(b => { if (b.prize > 0) stmts.push(D.prepare('UPDATE users SET balance=balance+? WHERE username=?').bind(b.prize, b.u)); });
+      stmts.push(D.prepare("UPDATE tourney_entry SET status=? WHERE mid=? AND status='held'").bind(refunded ? 'refunded' : 'done', r.mid));
+    }
+    const global = r.mode === 'tourney' && top > 0;
+    if (global) list.forEach(b => stmts.push(D.prepare('INSERT INTO tourney_log(mid,code,username,pts,catches,epic,legend,place,prize,fee,at) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(r.mid, r.code, b.u, b.pts, b.catches, b.epic, b.legend, b.place, b.prize, r.fee, now)));
+    let saved = true;
+    if (stmts.length) { try { await D.batch(stmts); } catch (e) { console.error('finish', e); saved = false; } }
+    r.results = { mode: r.mode, fee: r.fee, pool, pct: PRIZE_PCT, refunded, list, global, saved };
+    this.toRoom(r, { type: 'room_event', kind: 'end', results: r.results });
+    this.pushRoom(r);
+    entrants.forEach(u => this.wallet(u));
+    if (!r.members.size) this.rooms.delete(r.code);
+  }
+  // ---- jalannya pertandingan ----
+  ensureTick() { if (!this.tickT) this.tickT = setInterval(() => this.tick(), 1000); }
+  tick() {
+    const now = Date.now(); let live = false;
+    for (const r of [...this.rooms.values()]) {
+      if (r.phase === 'countdown') {
+        live = true;
+        if (now >= r.startAt) { r.phase = 'running'; this.toRoom(r, { type: 'room_event', kind: 'go' }); this.pushRoom(r); }
+      }
+      if (r.phase === 'running') {
+        live = true;
+        if (now >= r.endAt) this.finish(r).catch(e => console.error(e));
+      }
+      if ((r.phase === 'countdown' || r.phase === 'running') && r.emptyAt && now - r.emptyAt > EMPTY_GRACE_MS) this.finish(r).catch(e => console.error(e));
+    }
+    if (!live) { clearInterval(this.tickT); this.tickT = null; }
+  }
+  startMatch(ws) {
+    const p = this.peers.get(ws), r = p && p.room && this.rooms.get(p.room);
+    const bad = m => this.send(ws, { type: 'error', message: m });
+    if (!r) return bad('Kamu belum di dalam room.');
+    if (r.host !== p.user) return bad('Hanya host yang bisa memulai.');
+    if (!(r.phase === 'lobby' || (r.phase === 'ended' && r.fee === 0))) return bad('Pertandingan sudah berjalan atau selesai. Buat room baru untuk ronde berikutnya.');
+    if (r.members.size < 2) return bad('Butuh minimal 2 pemain untuk mulai.');
+    if (r.phase === 'ended') { // ronde ulang (khusus room gratis)
+      r.scores.clear(); r.entrants.clear();
+      for (const w of r.members) { const u = this.peers.get(w).user; r.scores.set(u, this.zero()); r.entrants.set(u, true); }
+      r.settled = false; r.results = null; r.mid = this.newMid();
+    }
+    r.phase = 'countdown'; r.startAt = Date.now() + COUNTDOWN_MS; r.endAt = r.startAt + r.dur * 1000; r.emptyAt = 0;
+    this.toRoom(r, { type: 'room_event', kind: 'start', by: p.user });
+    this.pushRoom(r); this.ensureTick();
+  }
+  // ---- room ----
+  async joinRoom(ws, m) {
+    const p = this.peers.get(ws); if (!p) return;
+    const bad = t => this.send(ws, { type: 'error', message: t });
+    const code = String(m.code || '').toUpperCase().trim();
+    if (!CODE_RE.test(code)) return bad('Kode room harus 4 huruf/angka.');
+    if (p.room === code && this.rooms.get(code)) return this.pushRoom(this.rooms.get(code));
     let r = this.rooms.get(code);
     if (!r) {
-      if (!resume) return this.send(ws, { type: 'error', message: 'Room ' + code + ' tidak ditemukan.' });
-      r = { code, host: p.user, members: new Set(), score: { pts: 0, catches: 0, epic: 0, legend: 0 } }; // sambung ulang setelah server restart
-      this.rooms.set(code, r);
+      if (m.resume) { r = this.makeRoom(code, p.user, 'casual', 0, 600); this.rooms.set(code, r); } // sambung ulang room gratis setelah server restart
+      else { if (m.rejoin) this.send(ws, { type: 'room', room: null }); return bad('Room ' + code + ' tidak ditemukan atau sudah selesai.'); }
     }
-    if (r.members.size >= ROOM_MAX) return this.send(ws, { type: 'error', message: 'Room penuh (maks ' + ROOM_MAX + ' pemain).' });
+    const known = r.entrants.has(p.user); // sudah terdaftar di pertandingan ini (sambung ulang): tidak bayar lagi
+    if (!known && r.members.size >= ROOM_MAX) return bad('Room penuh (maks ' + ROOM_MAX + ' pemain).');
+    if (!known && r.fee > 0) {
+      if (r.phase === 'ended') return bad('Pertandingan di room ini sudah selesai.');
+      if (r.phase !== 'lobby') return bad('Pertandingan sudah dimulai, pendaftaran ditutup.');
+      if (Number(m.fee) !== r.fee) // minta persetujuan biaya dulu
+        return this.send(ws, { type: 'join_need', code, mode: r.mode, fee: r.fee, dur: r.dur, pct: PRIZE_PCT, host: r.host, n: r.members.size });
+      if (!(await this.charge(p.user, r.fee, r.mid))) return bad('Saldo tidak cukup untuk biaya pendaftaran. Pastikan koinmu sudah tersinkron ke server.');
+      // keadaan bisa berubah selama menunggu pembayaran
+      const cur = this.rooms.get(code);
+      if (!this.peers.has(ws) || cur !== r || r.phase !== 'lobby' || r.members.size >= ROOM_MAX) {
+        await this.refund(r.mid, p.user);
+        return bad('Room berubah saat mendaftar, biaya dikembalikan. Coba lagi.');
+      }
+    }
     this.leaveRoom(ws, false);
-    r.members.add(ws); p.room = code;
+    r.members.add(ws); p.room = code; r.emptyAt = 0;
+    r.entrants.set(p.user, true);
+    if (!r.scores.has(p.user)) r.scores.set(p.user, this.zero());
     this.toRoom(r, { type: 'room_event', kind: 'join', user: p.user }, ws);
     this.pushRoom(r);
   }
-  createRoom(ws) {
+  async createRoom(ws, m) {
+    const p = this.peers.get(ws); if (!p) return;
+    const bad = t => this.send(ws, { type: 'error', message: t });
+    const mode = m.mode === 'tourney' ? 'tourney' : 'casual';
+    const dur = MATCH_DURS.has(Number(m.dur)) ? Number(m.dur) : 600;
+    const fee = Math.trunc(Number(m.fee) || 0);
+    if (!(fee >= 0 && fee <= MAX_FEE)) return bad('Biaya pendaftaran tidak valid.');
+    if (fee > 0 && fee < MIN_FEE) return bad('Biaya pendaftaran minimal 100M koin (atau 0 untuk gratis).');
+    if (mode === 'tourney' && fee < MIN_FEE) return bad('Turnamen wajib biaya pendaftaran minimal 100M koin.');
     const code = this.newCode();
-    if (!code) return this.send(ws, { type: 'error', message: 'Gagal membuat room, coba lagi.' });
-    const p = this.peers.get(ws);
+    if (!code) return bad('Gagal membuat room, coba lagi.');
+    const r = this.makeRoom(code, p.user, mode, fee, dur);
+    this.rooms.set(code, r); // pesan kode sementara agar tidak dipakai room lain selama membayar
+    if (fee > 0 && !(await this.charge(p.user, fee, r.mid))) {
+      this.rooms.delete(code);
+      return bad('Saldo tidak cukup untuk biaya pendaftaran. Pastikan koinmu sudah tersinkron ke server.');
+    }
+    if (!this.peers.has(ws)) { this.rooms.delete(code); if (fee > 0) await this.refund(r.mid, p.user); return; }
     this.leaveRoom(ws, false);
-    const r = { code, host: p.user, members: new Set([ws]), score: { pts: 0, catches: 0, epic: 0, legend: 0 } };
-    this.rooms.set(code, r); p.room = code;
+    r.members.add(ws); p.room = code;
+    r.entrants.set(p.user, true); r.scores.set(p.user, this.zero());
     this.pushRoom(r);
+    if (fee > 0) this.wallet(p.user);
   }
   leaveRoom(ws, silent) {
     const p = this.peers.get(ws);
@@ -476,7 +660,16 @@ export class GameRoom {
     if (!r) return;
     r.members.delete(ws);
     if (!silent) this.send(ws, { type: 'room', room: null });
-    if (!r.members.size) { this.rooms.delete(r.code); return; }
+    // keluar sebelum mulai = pendaftaran dibatalkan dan biaya dikembalikan. Setelah mulai, poin tetap tercatat (bisa sambung ulang).
+    if (r.phase === 'lobby' && r.entrants.has(p.user)) {
+      r.entrants.delete(p.user); r.scores.delete(p.user);
+      if (r.fee > 0) this.refund(r.mid, p.user).catch(e => console.error(e));
+    }
+    if (!r.members.size) {
+      if (r.phase === 'countdown' || r.phase === 'running') r.emptyAt = Date.now(); // masa tenggang sambung ulang
+      else this.rooms.delete(r.code);
+      return;
+    }
     if (r.host === p.user) r.host = this.peers.get([...r.members][0]).user;
     this.toRoom(r, { type: 'room_event', kind: 'leave', user: p.user });
     this.pushRoom(r);
@@ -539,8 +732,9 @@ export class GameRoom {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     switch (m.type) {
       case 'ping': return this.send(ws, { type: 'pong' });
-      case 'room_create': return this.createRoom(ws);
-      case 'room_join': return this.joinRoom(ws, m.code, !!m.resume);
+      case 'room_create': return this.createRoom(ws, m);
+      case 'room_join': return this.joinRoom(ws, m);
+      case 'room_start': return this.startMatch(ws);
       case 'room_leave': return this.leaveRoom(ws, false);
       case 'status': {
         const st = cap(m.st, 12).toLowerCase();
@@ -568,7 +762,7 @@ export class GameRoom {
         if (!fr) return this.send(ws, { type: 'error', message: 'Hanya bisa mengundang teman.' });
         const target = [...this.peers].find(([, q]) => q.user === to);
         if (!target) return this.send(ws, { type: 'error', message: '@' + to + ' sedang tidak online.' });
-        this.send(target[0], { type: 'invite', from: p.user, code: r.code });
+        this.send(target[0], { type: 'invite', from: p.user, code: r.code, mode: r.mode, fee: r.fee });
         return this.send(ws, { type: 'notice', message: 'Undangan terkirim ke @' + to });
       }
       case 'catch': {
@@ -580,10 +774,12 @@ export class GameRoom {
         p.lastCatch = { name: fish.name, rar };
         const r = p.room && this.rooms.get(p.room);
         if (r) {
-          const pts = RAR_PTS[rar] * (fish.shiny ? 2 : 1);
-          r.score.pts += pts; r.score.catches++; if (rar === 'epic') r.score.epic++; if (rar === 'legend') r.score.legend++;
+          // poin per individu, hanya dihitung saat pertandingan berjalan
+          const sc = r.phase === 'running' && now <= r.endAt + 1500 ? r.scores.get(p.user) : null;
+          const pts = sc ? RAR_PTS[rar] * (fish.shiny ? 2 : 1) : 0;
+          if (sc) { sc.pts += pts; sc.catches++; if (rar === 'epic') sc.epic++; if (rar === 'legend') sc.legend++; }
           this.toRoom(r, { type: 'room_event', kind: 'catch', user: p.user, fish, pts });
-          this.pushRoom(r);
+          if (sc) this.pushRoom(r);
         }
         if (rar === 'epic' || rar === 'legend') {
           // pagar global: maks 40 pengumuman per menit untuk seluruh server
