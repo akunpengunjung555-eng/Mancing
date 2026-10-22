@@ -1692,8 +1692,12 @@ const ISLES=[
 ];
 let ISLE_CUR=0,isleGo=null;
 function weightsFor(z,inSpot,ii){
-  const b=[[78,18,3.5,.5],[58,30,10,2],[40,33,20,7]][z],lm=1+.12*(luckLv()-1),sm=inSpot?2.2:1,lg=(ISLES[ii==null?ISLE_CUR:ii]||{lg:1}).lg;
-  return [b[0],b[1]*lm*sm,b[2]*lm*sm,b[3]*lm*sm*(inSpot?1.3:1)*lg];
+  /* Keseimbangan: peluang tiap kelangkaan naik dengan level hoki (L = upgrade + joran + umpan - 1; 0 = Cacing + Joran Bambu).
+     Langka: sudah ada sedikit di L rendah. Epik: mustahil di bawah L3, naik kuadrat. Legendaris: mustahil di bawah L7, naik kubik.
+     Jadi umpan/joran murah tidak mungkin dapat epik/legendaris; hanya set mahal yang membuka peluangnya. */
+  const b=[[78,18,3.5,.5],[58,30,10,2],[40,33,20,7]][z],L=Math.max(0,luckLv()-1),sm=inSpot?2.2:1,lg=(ISLES[ii==null?ISLE_CUR:ii]||{lg:1}).lg;
+  const mR=.55+.16*L, mE=L<3?0:.0042*L*L, mL=L<7?0:.00012*L*L*L;
+  return [b[0],b[1]*mR*sm,b[2]*mE*sm,b[3]*mL*sm*(inSpot?1.3:1)*lg];
 }
 function legendPct(i,z){const w=weightsFor(z,false,i);return w[3]/w.reduce((a,b)=>a+b,0)*100;}
 function pickFish(z,inSpot){
