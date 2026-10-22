@@ -439,7 +439,8 @@ const MAX_FEE = 1_000_000_000_000; // 1T koin
 const PRIZE_PCT = 50;             // juara dapat 50% dari total biaya pendaftaran (sisanya hangus)
 const COUNTDOWN_MS = 5000;
 const EMPTY_GRACE_MS = 90000;     // semua pemain putus saat pertandingan jalan: tunggu 90 dtk sebelum diselesaikan
-const TOUR_DUR = 180, TOUR_REG_MS = 120000, TOUR_MAX = 32; // playoff: duel 3 menit, pendaftaran 2 menit, maks 32 pemain
+const TOUR_DUR = 180, TOUR_MAXP = 36; // playoff: duel 3 menit, peserta 2-36 (genap)
+const TOUR_FEES = [0, 1e6, 1e7, 1e8, 1e9, 1e10]; // biaya daftar dari server: gratis, 1M, 10M, 100M, 1B, 10B
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_RE = /^[A-Z2-9]{4}$/;
 const EMOTES = new Set(['👍', '🔥', '😂', '😱', '🎣', '👑', '🐟', '❤️']);
@@ -452,7 +453,7 @@ export class GameRoom {
     this.rooms = new Map();   // code -> room (lihat makeRoom)
     this.globalWin = { at: 0, n: 0 };
     this.tickT = null;
-    this.T = null;            // turnamen playoff global (satu per server)
+    this.TS = new Map();      // turnamen playoff global: id -> turnamen (banyak sekaligus)
     // Instance baru = tidak ada pertandingan yang masih berjalan: kembalikan biaya pendaftaran yang masih tertahan.
     ctx.blockConcurrencyWhile(async () => {
       try {
@@ -585,7 +586,7 @@ export class GameRoom {
       }
       if ((r.phase === 'countdown' || r.phase === 'running') && r.emptyAt && now - r.emptyAt > EMPTY_GRACE_MS) this.finish(r).catch(e => console.error(e));
     }
-    if (this.T && this.tourTick(now)) live = true;
+    if (this.TS.size && this.tourTick(now)) live = true;
     if (!live) { clearInterval(this.tickT); this.tickT = null; }
   }
   startMatch(ws) {
@@ -684,47 +685,42 @@ export class GameRoom {
     this.toRoom(r, { type: 'room_event', kind: 'leave', user: p.user });
     this.pushRoom(r);
   }
-  // ---- TURNAMEN PLAYOFF (global, tanpa room): semua yang online boleh daftar, bagan gugur 1 lawan 1 ----
-  tView() {
-    const T = this.T; if (!T) return null;
-    return { phase: T.phase, host: T.host, dur: T.dur, champ: T.champ, players: [...T.players],
-      fee: T.fee, pool: T.fee * T.players.size, prize: T.prize,
-      left: T.phase === 'reg' ? Math.max(0, T.regEnd - Date.now()) : 0,
+  // ---- TURNAMEN PLAYOFF (global, tanpa room): pilih biaya + jumlah pemain, otomatis mulai saat penuh ----
+  tList() { return [...this.TS.values()].map(T => this.tView(T)); }
+  tView(T) {
+    return { id: T.id, phase: T.phase, fee: T.fee, size: T.size, dur: T.dur, champ: T.champ, players: [...T.players], pool: T.fee * T.players.size, prize: T.prize,
       rounds: T.rounds.map(rd => rd.map(m => ({ a: m.a, b: m.b, w: m.w, sa: m.sa, sb: m.sb, live: !!m.code && !m.w }))) };
   }
-  tPush() { this.broadcast({ type: 'tour', t: this.tView() }); }
+  tPush() { this.broadcast({ type: 'tour', list: this.tList() }); }
+  tOf(user) { for (const T of this.TS.values()) if (T.phase !== 'done' && T.players.has(user)) return T; return null; }
   async tJoin(ws, m) {
     const p = this.peers.get(ws); if (!p) return;
     const bad = t => this.send(ws, { type: 'error', message: t });
-    if (this.T && this.T.phase === 'done') this.T = null;
-    if (!this.T) {
-      const fee = Math.trunc(Number(m.fee) || 0);
-      if (fee < 0 || fee > MAX_FEE || (fee > 0 && fee < MIN_FEE)) return bad('Biaya pendaftaran minimal 100M koin (atau 0 = gratis).');
-      this.T = { phase: 'reg', host: p.user, dur: TOUR_DUR, fee, mid: this.newMid(), regEnd: Date.now() + TOUR_REG_MS, players: new Set(), rounds: [], champ: '', doneAt: 0, pts: {}, prize: null };
-    }
-    const T = this.T, drop = () => { if (this.T === T && !T.players.size) this.T = null; };
-    if (T.phase !== 'reg') return bad('Turnamen sedang berjalan. Ikut di turnamen berikutnya.');
-    if (T.players.has(p.user)) return;
-    if (T.players.size >= TOUR_MAX) return bad('Turnamen penuh (' + TOUR_MAX + ' pemain).');
-    if (T.fee > 0) {
-      if (Number(m.fee) !== T.fee) return this.send(ws, { type: 'tour_need', fee: T.fee });
-      if (!(await this.charge(p.user, T.fee, T.mid))) { drop(); return bad('Saldo tidak cukup untuk biaya pendaftaran. Pastikan koinmu sudah tersinkron ke server.'); }
-      if (this.T !== T || T.phase !== 'reg' || !this.peers.has(ws)) { await this.refund(T.mid, p.user); drop(); return bad('Turnamen berubah saat mendaftar, biaya dikembalikan.'); }
+    const fee = Math.trunc(Number(m.fee) || 0), size = Math.trunc(Number(m.size) || 0);
+    if (!TOUR_FEES.includes(fee) || size < 2 || size > TOUR_MAXP || size % 2) return bad('Pilihan turnamen tidak valid.');
+    if (this.tOf(p.user)) return bad('Kamu sudah terdaftar di sebuah turnamen.');
+    let T = [...this.TS.values()].find(x => x.phase === 'reg' && x.fee === fee && x.size === size);
+    if (!T) { const id = this.newMid(); T = { id, phase: 'reg', dur: TOUR_DUR, fee, size, players: new Set(), rounds: [], champ: '', doneAt: 0, pts: {}, prize: null }; this.TS.set(id, T); }
+    const gone = () => { if (!T.players.size && this.TS.get(T.id) === T) this.TS.delete(T.id); };
+    if (fee > 0) {
+      if (!(await this.charge(p.user, fee, T.id))) { gone(); return bad('Saldo tidak cukup untuk biaya pendaftaran. Pastikan koinmu sudah tersinkron ke server.'); }
+      if (T.phase !== 'reg' || T.players.size >= size || !this.peers.has(ws) || this.tOf(p.user)) { await this.refund(T.id, p.user); gone(); return bad('Turnamen berubah saat mendaftar, biaya dikembalikan. Coba lagi.'); }
       this.wallet(p.user);
     }
-    T.players.add(p.user); this.tPush(); this.ensureTick();
+    T.players.add(p.user);
+    if (T.players.size >= size) this.tBegin(T); // penuh = langsung mulai
+    this.tPush(); this.ensureTick();
   }
   tLeave(ws) {
-    const p = this.peers.get(ws), T = this.T;
-    if (!p || !T || T.phase !== 'reg' || !T.players.delete(p.user)) return;
-    if (T.fee > 0) this.refund(T.mid, p.user).catch(e => console.error(e));
-    if (!T.players.size) this.T = null; else if (T.host === p.user) T.host = [...T.players][0];
+    const p = this.peers.get(ws), T = p && this.tOf(p.user);
+    if (!T || T.phase !== 'reg') return;
+    T.players.delete(p.user);
+    if (T.fee > 0) this.refund(T.id, p.user).catch(e => console.error(e));
+    if (!T.players.size) this.TS.delete(T.id);
     this.tPush();
   }
-  tMatch(a, b) { return { a, b, w: '', sa: 0, sb: 0, code: '', readyAt: 0 }; }
-  tBegin() {
-    const T = this.T;
-    if (T.players.size < 2) { T.regEnd = Date.now() + TOUR_REG_MS; return; } // belum cukup pemain: tunggu lagi
+  tMatch(a, b) { return { a, b, w: '', sa: 0, sb: 0, code: '', readyAt: Date.now() + 6000 }; }
+  tBegin(T) {
     const arr = [...T.players];
     for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
     let size = 2; while (size < arr.length) size *= 2;
@@ -733,56 +729,58 @@ export class GameRoom {
     T.rounds = [r1];
     for (let n = half / 2; n >= 1; n /= 2) T.rounds.push(Array.from({ length: n }, () => this.tMatch(null, null)));
     T.phase = 'run';
-    r1.forEach((m, j) => { if (!m.b) this.tWin(0, j, m.a, 0, 0); });
-    this.tPush();
+    r1.forEach((m, j) => { if (!m.b) this.tWin(T, 0, j, m.a, 0, 0); });
   }
-  tWin(i, j, w, sa, sb) {
-    const T = this.T, m = T.rounds[i][j]; m.w = w; m.sa = sa; m.sb = sb;
-    if (i === T.rounds.length - 1) { T.champ = w; T.phase = 'done'; T.doneAt = Date.now(); this.tFinish().catch(e => console.error(e)); return; }
+  tWin(T, i, j, w, sa, sb) {
+    const m = T.rounds[i][j]; m.w = w; m.sa = sa; m.sb = sb;
+    if (i === T.rounds.length - 1) { T.champ = w; T.phase = 'done'; T.doneAt = Date.now(); this.tFinish(T).catch(e => console.error(e)); return; }
     const nx = T.rounds[i + 1][j >> 1]; if (j % 2 === 0) nx.a = w; else nx.b = w;
     nx.readyAt = Date.now() + 8000;
   }
-  tOpen(i, j) {
-    const T = this.T, m = T.rounds[i][j], find = u => [...this.peers].find(([, p]) => p.user === u);
+  tOpen(T, i, j) {
+    const m = T.rounds[i][j], find = u => [...this.peers].find(([, p]) => p.user === u);
     const A = find(m.a), B = find(m.b);
     if (!A || !B) { // WO: yang offline kalah
-      m.code = '-'; this.tWin(i, j, A ? m.a : B ? m.b : (Math.random() < 0.5 ? m.a : m.b), 0, 0); this.tPush(); return;
+      m.code = '-'; this.tWin(T, i, j, A ? m.a : B ? m.b : (Math.random() < 0.5 ? m.a : m.b), 0, 0); this.tPush(); return;
     }
     const code = this.newCode(); if (!code) return;
-    const r = this.makeRoom(code, m.a, 'duel', 0, T.dur); r.tm = { i, j }; this.rooms.set(code, r);
+    const r = this.makeRoom(code, m.a, 'duel', 0, T.dur); r.tm = { id: T.id, i, j }; this.rooms.set(code, r);
     for (const [ws, p] of [A, B]) { this.leaveRoom(ws, false); r.members.add(ws); p.room = code; r.entrants.set(p.user, true); r.scores.set(p.user, this.zero()); }
     m.code = code; r.phase = 'countdown'; r.startAt = Date.now() + COUNTDOWN_MS; r.endAt = r.startAt + r.dur * 1000;
     this.toRoom(r, { type: 'room_event', kind: 'start', by: 'turnamen' });
     this.pushRoom(r); this.tPush();
   }
   tMatchDone(r) {
-    const T = this.T; if (!T || !r.tm) return;
+    const T = r.tm && this.TS.get(r.tm.id); if (!T) return;
     const { i, j } = r.tm, m = T.rounds[i][j]; if (m.w) return;
     const za = r.scores.get(m.a) || this.zero(), zb = r.scores.get(m.b) || this.zero();
     const key = z => z.pts * 1e6 + z.legend * 1e3 + z.epic * 10 + z.catches; // seri: legendaris > epik > jumlah ikan > undian
     const ka = key(za), kb = key(zb);
     T.pts[m.a] = (T.pts[m.a] || 0) + za.pts; T.pts[m.b] = (T.pts[m.b] || 0) + zb.pts;
-    this.tWin(i, j, ka > kb ? m.a : kb > ka ? m.b : (Math.random() < 0.5 ? m.a : m.b), za.pts, zb.pts);
+    this.tWin(T, i, j, ka > kb ? m.a : kb > ka ? m.b : (Math.random() < 0.5 ? m.a : m.b), za.pts, zb.pts);
     this.tPush();
     setTimeout(() => { for (const ws of [...r.members]) this.leaveRoom(ws, false); }, 6000);
   }
-  async tFinish() { // hadiah: juara 50% dari total biaya, runner-up 20%; semua peserta masuk papan peringkat global
-    const T = this.T, D = this.env.DB, now = Date.now(), fin = T.rounds[T.rounds.length - 1][0];
+  async tFinish(T) { // hadiah: juara 50% dari total biaya, runner-up 20%; semua peserta masuk papan peringkat global
+    const D = this.env.DB, now = Date.now(), fin = T.rounds[T.rounds.length - 1][0];
     const ru = fin.a === T.champ ? fin.b : fin.a, pool = T.fee * T.players.size, prize = {};
     if (T.fee > 0) { prize[T.champ] = Math.floor(pool * PRIZE_PCT / 100); if (ru) prize[ru] = Math.floor(pool * 20 / 100); }
     const st = Object.entries(prize).map(([u, v]) => D.prepare('UPDATE users SET balance=balance+? WHERE username=?').bind(v, u));
-    if (T.fee > 0) st.push(D.prepare("UPDATE tourney_entry SET status='done' WHERE mid=? AND status='held'").bind(T.mid));
+    if (T.fee > 0) st.push(D.prepare("UPDATE tourney_entry SET status='done' WHERE mid=? AND status='held'").bind(T.id));
     for (const u of T.players) st.push(D.prepare('INSERT INTO tourney_log(mid,code,username,pts,catches,epic,legend,place,prize,fee,at) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
-      .bind(T.mid, 'TURN', u, T.pts[u] || 0, 0, 0, 0, u === T.champ ? 1 : u === ru ? 2 : 3, prize[u] || 0, T.fee, now));
+      .bind(T.id, 'TURN', u, T.pts[u] || 0, 0, 0, 0, u === T.champ ? 1 : u === ru ? 2 : 3, prize[u] || 0, T.fee, now));
     try { await D.batch(st); } catch (e) { console.error('tfinish', e); }
     T.prize = prize; this.tPush(); for (const u of T.players) this.wallet(u);
   }
   tourTick(now) {
-    const T = this.T; if (!T) return false;
-    if (T.phase === 'reg') { if (now >= T.regEnd) this.tBegin(); return true; }
-    if (T.phase === 'done') { if (now - T.doneAt > 90000) { this.T = null; this.tPush(); return false; } return true; }
-    T.rounds.forEach((rd, i) => rd.forEach((m, j) => { if (!m.w && !m.code && m.a && m.b && now >= m.readyAt) this.tOpen(i, j); }));
-    return true;
+    let busy = false;
+    for (const T of [...this.TS.values()]) {
+      if (T.phase === 'reg') continue;
+      busy = true;
+      if (T.phase === 'done') { if (now - T.doneAt > 90000) { this.TS.delete(T.id); this.tPush(); } continue; }
+      T.rounds.forEach((rd, i) => rd.forEach((m, j) => { if (!m.w && !m.code && m.a && m.b && now >= m.readyAt) this.tOpen(T, i, j); }));
+    }
+    return busy;
   }
   async fetch(request) {
     const user = request.headers.get('x-mancing-user') || '';
@@ -794,7 +792,7 @@ export class GameRoom {
     for (const [w, p] of this.peers) if (p.user === user) { try { w.close(4000, 'replaced'); } catch {} this.drop(w); }
     this.peers.set(server, { user, room: '', st: 'lobi', tokens: 20, tAt: Date.now(), lastCatch: null, lastGlobal: 0 });
     this.send(server, { type: 'hello', user, online: this.online() });
-    if (this.T) this.send(server, { type: 'tour', t: this.tView() });
+    if (this.TS.size) this.send(server, { type: 'tour', list: this.tList() });
     this.broadcast({ type: 'online', n: this.online() }, server);
     server.addEventListener('close', () => this.drop(server));
     server.addEventListener('error', () => this.drop(server));
@@ -848,7 +846,6 @@ export class GameRoom {
       case 'room_start': return this.startMatch(ws);
       case 't_join': return this.tJoin(ws, m);
       case 't_leave': return this.tLeave(ws);
-      case 't_start': { const T = this.T; if (T && T.phase === 'reg' && T.host === p.user) { if (T.players.size < 2) return this.send(ws, { type: 'error', message: 'Butuh minimal 2 pemain.' }); this.tBegin(); } return; }
       case 'room_leave': return this.leaveRoom(ws, false);
       case 'status': {
         const st = cap(m.st, 12).toLowerCase();

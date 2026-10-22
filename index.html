@@ -5151,7 +5151,7 @@ body:has(#app.clean) #mpFab{opacity:.12}
   <div class="log" id="mpGBoard">Ketuk salah satu tombol untuk memuat.</div>
 
   <h4>🏆 Turnamen Playoff</h4>
-  <div id="tourBox"><div class="st" id="tourSt">Belum ada turnamen.</div><div id="tourFeeRow"><span class="lbl">Biaya daftar (juta koin, 0 = gratis)</span><input id="tourFee" type="number" min="0" step="1" value="0" inputmode="numeric"></div><div class="row"><button class="b pri" id="tourJoin" type="button">🏆 Ikut turnamen</button><button class="b go" id="tourGo" type="button" hidden>▶ Mulai sekarang</button></div><div class="br" id="tourBr"></div><small>Tanpa room: semua yang online boleh ikut. Gugur 1 lawan 1, tiap duel 3 menit, poin ikan tertinggi lolos (seri = tambahan 60 detik). Biaya daftar dari pendaftar pertama; juara dapat 50% total biaya, runner-up 20%. Hasil masuk papan global.</small></div>
+  <div id="tourBox"><div class="st" id="tourSt">Pilih biaya dan jumlah pemain.</div><div id="tourPick"><span class="lbl">Biaya daftar</span><select id="tourFee"><option value="0">Gratis</option><option value="1000000">1M</option><option value="10000000">10M</option><option value="100000000">100M</option><option value="1000000000">1B</option><option value="10000000000">10B</option></select><span class="lbl">Jumlah pemain</span><select id="tourSize"></select></div><div class="row"><button class="b pri" id="tourJoin" type="button">🏆 Ikut turnamen</button></div><div class="br" id="tourBr"></div><small>Tanpa room: pilih biaya dan jumlah pemain, lalu ketuk ikut. Turnamen menunggu sampai penuh, lalu mulai otomatis. Gugur 1 lawan 1, duel 3 menit (seri = tambahan 60 detik). Juara dapat 50% total biaya, runner-up 20%. Hasil masuk papan global.</small></div>
 
   <h4>🎮 Mabar</h4>
   <div id="mpOut">
@@ -5280,7 +5280,7 @@ function route(m){
       if(gOn.checked)announce(it);
       break}
     case 'tour_need':feedAdd('ℹ️ Turnamen berbiaya '+fmtC(m.fee)+' koin. Ketuk Ikut turnamen lagi.');break;
-    case 'tour':S.tour=m.t;if(m.t)m.t._rx=performance.now();renderTour();break;
+    case 'tour':S.tours=m.list||[];renderTour();break;
     case 'room':S.room=m.room;if(m.room)m.room._rx=performance.now();if(!m.room){S.feed=[]}renderRoom();break;
     case 'room_status':{if(S.room){const x=S.room.members.find(y=>y.u===m.user);if(x){x.st=m.st;renderRoom()}}break}
     case 'room_event':roomEvent(m);break;
@@ -5588,14 +5588,15 @@ $('mpChat').addEventListener('submit',e=>{
 /* ---------- aksi ---------- */
 const need=()=>{if(S.ws&&S.ws.readyState===1)return true;setText($('mpStatus'),'Belum tersambung ke server.');return false};
 /* ---------- TURNAMEN PLAYOFF: tanpa room, semua online boleh ikut, bagan 1 lawan 1 ---------- */
+(()=>{const s=$('tourSize');for(let n=2;n<=36;n+=2){const o=document.createElement('option');o.value=n;o.textContent=n+' pemain';s.append(o)}s.value='8'})();
+function curTour(){const l=S.tours||[],me=l.filter(t=>t.players.includes(S.me));return me.find(t=>t.phase!=='done')||me[0]||l.find(t=>t.phase==='reg'&&String(t.fee)===$('tourFee').value&&String(t.size)===$('tourSize').value)||null}
 function renderTour(){
-  const t=S.tour,st=$('tourSt'),br=$('tourBr'),jb=$('tourJoin'),gb=$('tourGo');if(!st)return;br.textContent='';
-  const inT=!!t&&t.players.includes(S.me),reg=!!t&&t.phase==='reg';
-  jb.hidden=!!t&&t.phase==='run';$('tourFeeRow').hidden=!!t&&t.phase!=='done';jb.textContent=reg&&inT?'🚪 Batal ikut':'🏆 Ikut turnamen';
-  gb.hidden=!(reg&&t.host===S.me&&t.players.length>=2);
-  if(!t)st.textContent='Belum ada turnamen. Jadilah yang pertama mendaftar!';
-  else if(reg)st.textContent='Pendaftaran: '+t.players.length+' pemain · '+(t.fee>0?'biaya '+fmtC(t.fee)+' · pool '+fmtC(t.pool):'gratis')+' · mulai dalam '+mmss(Math.max(0,t.left-(performance.now()-t._rx)));
-  else if(t.phase==='run')st.textContent='Turnamen berjalan'+(inT?' · semoga menang!':' · kamu menonton');
+  const st=$('tourSt');if(!st)return;const t=curTour(),br=$('tourBr'),jb=$('tourJoin');br.textContent='';
+  const inT=!!t&&t.phase!=='done'&&t.players.includes(S.me),reg=!!t&&t.phase==='reg';
+  $('tourPick').hidden=inT;jb.hidden=inT&&!reg;jb.textContent=inT?'🚪 Batal ikut':'🏆 Ikut turnamen';
+  if(!t)st.textContent='Belum ada yang mendaftar di pilihan ini. Ketuk ikut, lalu tunggu pemain lain.';
+  else if(reg)st.textContent='Menunggu pemain '+t.players.length+'/'+t.size+' · '+(t.fee>0?'biaya '+fmtC(t.fee)+' · pool '+fmtC(t.pool):'gratis')+' · mulai otomatis saat penuh';
+  else if(t.phase==='run')st.textContent='Turnamen berjalan ('+t.size+' pemain)'+(inT?' · semoga menang!':' · kamu menonton');
   else st.textContent='👑 Juara: @'+t.champ+(t.champ===S.me?' (kamu!)':'')+(t.prize&&t.prize[t.champ]?' · hadiah '+fmtC(t.prize[t.champ]):'');
   if(!t||!t.rounds.length)return;
   const n=t.rounds.length;
@@ -5613,13 +5614,11 @@ function renderTour(){
     br.append(c);
   });
 }
-$('tourJoin').addEventListener('click',async()=>{if(!need())return;const t=S.tour,reg=!!t&&t.phase==='reg';if(reg&&t.players.includes(S.me))return send({type:'t_leave'});
-  const feeM=Math.floor(Number($('tourFee').value)||0),fee=reg?t.fee:feeM*1e6;
-  if(!reg&&(feeM<0||(feeM>0&&feeM<100))){setText($('mpStatus'),'Biaya minimal 100 juta koin (atau 0 = gratis).');return}
-  if(fee>0&&!confirm('Bayar '+fmtC(fee)+' koin untuk ikut turnamen? Juara dapat 50% total biaya, runner-up 20%.'))return;
-  await pushWallet();send({type:'t_join',fee})});
-$('tourGo').addEventListener('click',()=>{if(need())send({type:'t_start'})});
-setInterval(()=>{if(S.tour&&S.tour.phase==='reg'&&!panel.hidden)renderTour()},1000);
+$('tourFee').addEventListener('change',renderTour);$('tourSize').addEventListener('change',renderTour);
+$('tourJoin').addEventListener('click',async()=>{if(!need())return;const t=curTour();if(t&&t.phase==='reg'&&t.players.includes(S.me))return send({type:'t_leave'});
+  const fee=Number($('tourFee').value)||0,size=Number($('tourSize').value)||2;
+  if(fee>0&&!confirm('Bayar '+fmtC(fee)+' koin untuk ikut turnamen '+size+' pemain? Juara dapat 50% total biaya, runner-up 20%.'))return;
+  await pushWallet();send({type:'t_join',fee,size})});
 window.__mpMode=k=>{if(k==='solo')return;open(true);const e=$(k==='tour'?'tourBox':'mpOut');if(e)setTimeout(()=>e.scrollIntoView({block:'start'}),60)};
 $('mpCreate').addEventListener('click',doCreate);
 $('mpJoin').addEventListener('click',()=>{const c=$('mpCodeIn').value.trim().toUpperCase();if(c.length!==4){setText($('mpStatus'),'Kode room 4 karakter.');return}if(need())joinCode(c)});
